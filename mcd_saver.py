@@ -130,14 +130,20 @@ def fen(x) -> float:
 
 # ---------------------------------------------------------------- 业务步骤
 
-def find_store(city: str, keyword: str) -> dict:
-    """按位置查询附近可点餐门店, 返回最近的一家。"""
+def find_store(city: str, keyword: str, prefer_open: bool = True) -> dict:
+    """按位置查询附近可点餐门店。
+    默认优先返回"当前营业中"的门店(凌晨会自动选中 24h 店, 避免拿到空菜单);
+    若全城都打烊, 才退回距离最近的一家。"""
     data = call("query-nearby-stores",
                 {"beType": 1, "searchType": 2, "city": city, "keyword": keyword})
     stores = data if isinstance(data, list) else data.get("data", [])
     if not stores:
         raise McpError(f"未在 {city} 找到关键词为 {keyword} 的门店")
     stores = sorted(stores, key=lambda s: s.get("distance") or 999999)
+    if prefer_open:
+        for s in stores:
+            if s.get("businessStatus"):
+                return s
     return stores[0]
 
 

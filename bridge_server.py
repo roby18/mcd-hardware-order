@@ -833,22 +833,17 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         path = self.path.split("?")[0]
 
-        if path == "/" or path == "/index.html":
-            p = os.path.join(WEB_DIR, "index.html")
+        # 根路径默认新版(深色 stage); 旧版留档在 /classic, /index.html 也仍可访问
+        if path == "/" or path == "/stage" or path == "/index.html" or path == "/classic":
+            name = "index.html" if path in ("/index.html", "/classic") else "stage.html"
+            p = os.path.join(WEB_DIR, name)
+            if not os.path.exists(p) and name == "stage.html":
+                p = os.path.join(WEB_DIR, "index.html")   # 新版缺失时回退旧版
             if os.path.exists(p):
                 with open(p, "rb") as f:
                     self._send(200, f.read(), "text/html; charset=utf-8")
             else:
-                self._send(404, "index.html 不存在")
-            return
-
-        if path == "/stage":
-            p = os.path.join(WEB_DIR, "stage.html")
-            if os.path.exists(p):
-                with open(p, "rb") as f:
-                    self._send(200, f.read(), "text/html; charset=utf-8")
-            else:
-                self._send(404, "stage.html 不存在")
+                self._send(404, name + " 不存在")
             return
 
         if path == "/radial":
