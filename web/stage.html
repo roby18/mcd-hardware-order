@@ -217,6 +217,86 @@ body{
 .avatab{display:none}
 .ver{text-align:center;font-size:10px;color:var(--dim2);letter-spacing:.03em;padding:2px 0 4px;
   opacity:.75}
+
+/* ---------------- 顶栏图标按钮 ---------------- */
+.icobtn{flex:none;width:42px;height:42px;border-radius:50%;border:1px solid var(--line);
+  background:rgba(255,255,255,.05);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;color:var(--gold);transition:.16s;position:relative}
+.icobtn:hover{background:rgba(255,199,44,.14);border-color:var(--gold)}
+.icobtn svg{width:19px;height:19px}
+.icobtn.rec{background:var(--red);border-color:var(--red);color:#fff;
+  animation:recpulse 1s ease-in-out infinite}
+@keyframes recpulse{0%,100%{box-shadow:0 0 0 0 rgba(218,41,28,.6)}
+  50%{box-shadow:0 0 0 10px rgba(218,41,28,0)}}
+
+/* 语音浮层 */
+.vlayer{position:fixed;inset:0;background:rgba(6,4,3,.72);backdrop-filter:blur(10px);
+  -webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;z-index:90}
+.vlayer.on{display:flex}
+.vbox{background:linear-gradient(170deg,rgba(255,199,44,.14),rgba(30,25,21,.96));
+  border:1px solid rgba(255,199,44,.34);border-radius:26px;padding:30px 46px;text-align:center;
+  box-shadow:0 30px 80px rgba(0,0,0,.7)}
+.wave{display:flex;gap:5px;justify-content:center;align-items:flex-end;height:38px;margin-bottom:14px}
+.wave i{width:7px;border-radius:4px;background:var(--gold);animation:wv 1s ease-in-out infinite}
+.wave i:nth-child(1){height:12px;animation-delay:0s}
+.wave i:nth-child(2){height:26px;animation-delay:.12s}
+.wave i:nth-child(3){height:38px;animation-delay:.24s}
+.wave i:nth-child(4){height:20px;animation-delay:.36s}
+.wave i:nth-child(5){height:30px;animation-delay:.48s}
+.wave i:nth-child(6){height:14px;animation-delay:.6s}
+@keyframes wv{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1)}}
+.vbox .t1{font-size:18px;font-weight:800;color:#fff}
+.vbox .t2{font-size:12.5px;color:var(--dim);margin-top:6px}
+
+/* ---------------- 硬件镜像 ---------------- */
+.hwfab{position:fixed;left:22px;bottom:22px;z-index:60;width:58px;height:58px;border-radius:18px;
+  border:1px solid rgba(255,199,44,.3);cursor:pointer;
+  background:rgba(30,25,21,.9);backdrop-filter:blur(16px);color:var(--gold);
+  box-shadow:0 14px 34px rgba(0,0,0,.5);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:2px;transition:.18s}
+.hwfab:hover{transform:translateY(-3px);border-color:var(--gold)}
+.hwfab svg{width:20px;height:20px}
+.hwfab small{font-size:8px;font-weight:800;letter-spacing:.04em;color:#B9ABA2}
+.hwpanel{position:fixed;left:22px;bottom:92px;z-index:61;width:288px;display:none;
+  background:rgba(24,20,17,.97);backdrop-filter:blur(18px);
+  border:1px solid rgba(255,199,44,.26);border-radius:20px;padding:15px;
+  box-shadow:0 24px 60px rgba(0,0,0,.65)}
+.hwpanel.on{display:block}
+.hwpanel h4{margin:0 0 11px;font-size:11px;font-weight:800;color:var(--gold);letter-spacing:.1em;
+  display:flex;align-items:center;gap:7px}
+.hwpanel h4 span{margin-left:auto;font-size:9px;color:var(--dim2);letter-spacing:.04em}
+.hwkeys{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.hwk{aspect-ratio:1.5;border-radius:10px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.05);color:#B9ABA2;font-size:10px;font-weight:700;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
+  cursor:pointer;font-family:inherit;padding:2px;transition:.12s;line-height:1.15;text-align:center}
+.hwk:hover{border-color:rgba(255,199,44,.5);color:#fff}
+.hwk.hit{background:rgba(255,199,44,.26);border-color:var(--gold);color:#fff;
+  box-shadow:0 0 14px rgba(255,199,44,.45);transform:scale(.94)}
+.hwk b{font-size:9px;color:var(--gold);opacity:.8}
+.hwk i{font-style:normal;font-size:9px;opacity:.62;max-width:100%;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.hwdir{margin-top:10px;font-size:10.5px;color:var(--dim2);display:flex;justify-content:space-between}
+.hwdir b{color:var(--gold)}
+
+/* ---------------- 膳食佐证 ---------------- */
+.nutribox{display:none;margin-top:11px;padding-top:11px;border-top:1px solid rgba(255,255,255,.08);
+  max-height:230px;overflow-y:auto}
+.nutribox.on{display:block}
+.nh{font-size:11.5px;font-weight:800;color:var(--gold);margin-bottom:8px;display:flex;
+  align-items:center;gap:7px;flex-wrap:wrap}
+.nh .tag{font-size:9px;font-weight:700;background:rgba(255,199,44,.16);border:1px solid var(--line);
+  border-radius:5px;padding:1px 6px;color:var(--gold)}
+.ncard{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);
+  border-radius:11px;padding:9px 11px;margin-bottom:7px}
+.ncard .nt{font-size:11.5px;font-weight:700;line-height:1.4}
+.ncard .nt a{color:#E8D9CC;text-decoration:none}
+.ncard .nt a:hover{color:var(--gold);text-decoration:underline}
+.ncard .np{font-size:10.5px;color:#9C8C82;line-height:1.5;margin-top:4px}
+.ncard .nm2{display:flex;gap:8px;flex-wrap:wrap;margin-top:5px;font-size:9.5px;color:var(--dim2)}
+.ncard .nm2 .sc{color:var(--gold)}
+.nempty{font-size:11px;color:var(--dim);line-height:1.6;padding:4px 0}
+.nload{font-size:11px;color:var(--gold);line-height:1.6;padding:4px 0}
 </style>
 </head>
 <body>
@@ -230,6 +310,11 @@ body{
       <div class="ttl">今日菜单</div>
     </div>
     <nav class="tabs" id="tabs"></nav>
+    <button class="icobtn" id="micBtn" title="按住说话（松开发送）">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+        <rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
+        <path d="M12 17.5V21"/></svg>
+    </button>
     <button class="cartbtn" id="cartBtn" title="餐盘">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M4 5h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L22 8H6.5"/>
@@ -326,6 +411,16 @@ body{
     </div>
     <div class="msg" id="msg"></div>
 
+    <div style="display:flex;gap:9px;align-items:center;flex-wrap:wrap">
+      <button class="chip" id="btnNutri">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 21c4 0 7-2.8 7-6.6 0-4.6-4.4-8.2-5.6-11.4-.4-1.4-2.4-1.4-2.8 0C9.4 6.2 5 9.8 5 14.4 5 18.2 8 21 12 21z"/></svg>
+        官方膳食佐证
+      </button>
+      <span style="font-size:10px;color:var(--dim2)">元宝搜索 · 只查政府信源</span>
+    </div>
+    <div class="nutribox" id="nutriBox"></div>
+
     <div class="analysis" id="analysis">
       <div class="a-block">
         <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c4 0 7-2.8 7-6.6 0-4.6-4.4-8.2-5.6-11.4-.4-1.4-2.4-1.4-2.8 0C9.4 6.2 5 9.8 5 14.4 5 18.2 8 21 12 21z"/></svg></div>
@@ -340,7 +435,29 @@ body{
     </div>
   </section>
 
-  <div class="ver">v1.0 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价</div>
+  <div class="ver">v1.1 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价</div>
+</div>
+
+<!-- 语音浮层 -->
+<div class="vlayer" id="vlayer">
+  <div class="vbox">
+    <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="t1" id="vtitle">我在听…</div>
+    <div class="t2" id="vsub">说完松手即发送</div>
+  </div>
+</div>
+
+<!-- 硬件镜像 -->
+<button class="hwfab" id="hwFab" title="展开硬件镜像">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+    <rect x="2.5" y="5" width="19" height="14" rx="2.5"/>
+    <path d="M7 9.5h.01M11 9.5h.01M15 9.5h.01M7 14h10"/></svg>
+  <small>硬件镜像</small>
+</button>
+<div class="hwpanel" id="hwPanel">
+  <h4>LIVE INPUT 硬件镜像 <span>ESP32 · 8 键</span></h4>
+  <div class="hwkeys" id="hwkeys"></div>
+  <div class="hwdir"><span>点键帽可模拟按键</span><b id="hwdirTxt">待机</b></div>
 </div>
 
 <script>
@@ -624,6 +741,109 @@ $('btnConfirm').onclick=confirmOrder;
 $('btnClear').onclick=()=>{
   post('/api/clear').then(()=>{ poll(); say('餐盘已清空'); });
 };
+
+/* ---------------- 语音 PTT ---------------- */
+let voiceBusy=false;
+function voiceDown(){
+  if(voiceBusy) return; voiceBusy=true;
+  $('vlayer').classList.add('on');
+  $('micBtn').classList.add('rec');
+  $('vtitle').textContent='我在听…';
+  $('vsub').textContent='说完松手即发送';
+  post('/api/voice',{state:'down'});
+}
+function voiceUp(){
+  if(!voiceBusy) return; voiceBusy=false;
+  $('vlayer').classList.remove('on');
+  $('micBtn').classList.remove('rec');
+  post('/api/voice',{state:'up'});
+}
+(function bindMic(){
+  const m=$('micBtn');
+  m.addEventListener('pointerdown',e=>{ e.preventDefault(); voiceDown(); });
+  m.addEventListener('pointerup',()=>voiceUp());
+  m.addEventListener('pointerleave',()=>voiceUp());
+  m.addEventListener('click',e=>e.preventDefault());
+})();
+
+/* ---------------- 硬件镜像 (8 键) ---------------- */
+let KEYMAP={};
+const ACTIONS={confirm:'确认下单',clear:'清空餐盘',voice:'语音',up:'上一个',down:'下一个'};
+async function loadKeymap(){
+  try{
+    const c=await (await fetch('/api/config')).json();
+    KEYMAP=c.keymap||{};
+    renderHwKeys();
+  }catch(e){ renderHwKeys(); }
+}
+function renderHwKeys(){
+  const box=$('hwkeys');
+  let html='';
+  for(let n=1;n<=8;n++){
+    const cfg=KEYMAP[String(n)];
+    let sub='';
+    if(n===8) sub='确认下单';
+    else if(cfg&&cfg.type==='item'){
+      const it=CATALOG.find(c=>c.code===cfg.code);
+      sub=it?it.name.slice(0,5):'餐品';
+    }else if(cfg&&cfg.type==='action'){
+      sub=ACTIONS[cfg.action]||cfg.action;
+    }else{
+      const mains=CATALOG.filter(c=>c.role==='main');
+      const it=mains[n-1];
+      sub=it?it.name.slice(0,5):'餐品';
+    }
+    html+=`<button class="hwk" data-k="${n}"><b>${n}</b><i>${esc(sub)}</i></button>`;
+  }
+  box.innerHTML=html;
+  box.querySelectorAll('.hwk').forEach(b=>b.onclick=()=>pressKey(+b.dataset.k));
+}
+function pressKey(n){
+  const el=document.querySelector(`.hwk[data-k="${n}"]`);
+  if(el){ el.classList.add('hit'); setTimeout(()=>el.classList.remove('hit'),260); }
+  $('hwdirTxt').textContent='按键 '+n;
+  post('/api/key',{key:n}).then(r=>{
+    if(r&&r.say) say(r.say);
+    poll();
+  });
+}
+$('hwFab').onclick=()=>{
+  const p=$('hwPanel');
+  p.classList.toggle('on');
+  if(p.classList.contains('on')&&!Object.keys(KEYMAP).length) loadKeymap();
+};
+
+/* ---------------- 官方膳食佐证 ---------------- */
+$('btnNutri').onclick=async()=>{
+  const box=$('nutriBox'), cart=STATE.cart||[];
+  box.classList.add('on');
+  if(!cart.length){
+    box.innerHTML='<div class="nempty">餐盘还是空的，先加几样餐品再查<b>官方膳食参考</b>。</div>';
+    return;
+  }
+  const names=[...new Set(cart.map(i=>i.name))].slice(0,4).join(' ');
+  const kw=names+' 热量 营养 膳食 建议';
+  box.innerHTML='<div class="nload">正在向元宝搜索官方信源求证「'+esc(names)+'」的营养与膳食建议…</div>';
+  const d=await post('/api/yb',{keywords:kw,round:1,industry:'gov',cnt:10});
+  if(d.error||!d.count){
+    box.innerHTML='<div class="nempty">官方信源暂时没查到可靠结果'+
+      (d.error?('（'+esc(d.error)+'）'):'')+'，已如实告知，不编造。</div>';
+    return;
+  }
+  let html='<div class="nh">官方膳食佐证 <span class="tag">元宝 · Industry=gov</span></div>';
+  html+=(d.pages||[]).slice(0,4).map(p=>{
+    const ok=/^https?:\/\//.test(p.url);
+    return '<div class="ncard"><div class="nt">'+
+      (ok?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title||p.url)}</a>`
+         :esc(p.title||'(无标题)'))+'</div>'+
+      (p.passage?`<div class="np">${esc(p.passage.slice(0,150))}${p.passage.length>150?'…':''}</div>`:'')+
+      '<div class="nm2">'+(p.site?`<span>来源 ${esc(p.site)}</span>`:'')+
+      (p.date?`<span>${esc(p.date)}</span>`:'')+
+      '</div></div>';
+  }).join('');
+  html+='<div class="nempty" style="margin-top:2px">来自元宝搜索官方信源(Industry=gov)，仅供搭配参考，具体以包装营养标签与官方渠道为准。</div>';
+  box.innerHTML=html;
+};
 $('arrowL').onclick=()=>rotate(-1);
 $('arrowR').onclick=()=>rotate(1);
 
@@ -635,6 +855,7 @@ $('arrowR').onclick=()=>rotate(1);
     buildCats();                 // 分类取自 MCP 真实 cat 字段
     await poll();
     renderTabs(); renderCards();
+    loadKeymap();                // 硬件镜像 8 键映射
     // 默认填一句示例
     $('ask').placeholder='例如：3 人，预算 80 元，喜欢辣味，不要洋葱';
   }catch(e){
