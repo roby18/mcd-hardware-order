@@ -5,3 +5,5 @@ web/img/
 __pycache__/
 *.pyc
 # 凭证文件一律不入库：真实 Token 放在仓库外的 .workbuddy/credentials-*.env
+
+push_api.py
