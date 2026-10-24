@@ -273,9 +273,11 @@ class Bridge:
         self.broadcast()
 
     # ------------------------------------------------ 元宝搜索（侦探赛道）
-    def yb_search(self, keywords, round_no=1):
+    def yb_search(self, keywords, round_no=1, industry="", freshness="", cnt=0, site=""):
         """单次元宝搜索, 返回结构化结果 + 证据信息(RequestId/时间戳)。
-        每次查询都留痕, 供侦探赛道截图与证据链报告使用。"""
+        每次查询都留痕, 供侦探赛道截图与证据链报告使用。
+        支持元宝特有参数: Industry(gov/news/acad/finance 垂直领域)、
+        Freshness(d/m/y 时效)、Cnt(结果条数)、Site(指定/排除站点)。"""
         import urllib.request
         import urllib.error
         keywords = (keywords or "").strip()
@@ -284,7 +286,12 @@ class Bridge:
         api_key = os.environ.get("YUANBAO_API_KEY") or os.environ.get("TENCENTCLOUD_WSA_APIKEY")
         if not api_key:
             return {"error": "未配置 YUANBAO_API_KEY 环境变量"}
-        body = json.dumps({"Query": keywords}, ensure_ascii=False).encode("utf-8")
+        params = {"Query": keywords}
+        if industry:   params["Industry"] = industry
+        if freshness:  params["Freshness"] = freshness
+        if cnt:        params["Cnt"] = int(cnt)
+        if site:       params["Site"] = site
+        body = json.dumps(params, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(YUANBAO_URL, data=body, method="POST")
         req.add_header("Authorization", "Bearer " + api_key)
         req.add_header("Content-Type", "application/json; charset=UTF-8")
@@ -306,19 +313,32 @@ class Bridge:
                 item = json.loads(p) if isinstance(p, str) else (p or {})
             except json.JSONDecodeError:
                 continue
+            passage = " ".join((item.get("passage") or "").split())
+            if not passage:
+                passage = " ".join((item.get("content") or "").split())
+            pics = []
+            for pic in (item.get("pics") or [])[:4]:
+                if not isinstance(pic, dict):
+                    continue
+                u = (pic.get("origin_url") or "").strip()
+                if u:
+                    pics.append({"caption": (pic.get("caption") or "").strip(), "url": u})
             pages.append({
                 "title": (item.get("title") or "").strip(),
-                "passage": " ".join((item.get("passage") or "").split()),
+                "passage": passage,
                 "url": (item.get("url") or "").strip(),
                 "site": (item.get("site") or "").strip(),
                 "date": (item.get("date") or "").strip(),
                 "score": item.get("score"),
+                "pics": pics,
             })
         elapsed = round(time.time() - started, 2)
         self.push_log(f"[侦探] 第{round_no}轮「{keywords}」-> {len(pages)} 条 / {elapsed}s")
         return {
             "round": round_no,
             "keywords": keywords,
+            "industry": industry,
+            "freshness": freshness,
             "requestId": resp.get("RequestId", ""),
             "ts": time.strftime("%H:%M:%S"),
             "elapsed": elapsed,
@@ -815,8 +835,14 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/yb":
-            # 侦探赛道: 元宝搜索单次查询(带证据信息)
-            r = BRIDGE.yb_search(b.get("keywords", ""), b.get("round", 1))
+            # 侦探赛道: 元宝搜索单次查询(带证据信息 + 垂直领域/时效/条数)
+            r = BRIDGE.yb_search(
+                b.get("keywords", ""), b.get("round", 1),
+                industry=b.get("industry", ""),
+                freshness=b.get("freshness", ""),
+                cnt=b.get("cnt", 0),
+                site=b.get("site", ""),
+            )
             self._json(r)
             return
 
