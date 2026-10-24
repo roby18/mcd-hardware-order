@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 96'%3E%3Cg stroke='%23FFC72C' stroke-width='15' fill='none'%3E%3Cpath d='M12 88 C12 30 26 6 42 6 C58 6 68 30 68 88'/%3E%3Cpath d='M52 88 C52 30 66 6 82 6 C98 6 108 30 108 88'/%3E%3C/g%3E%3C/svg%3E">
+<title>今日菜单 · 麦门点餐台</title>
+<style>
+:root{
+  --gold:#FFC72C; --gold-d:#E8A800; --gold-s:rgba(255,199,44,.14);
+  --red:#DA291C;
+  --bg0:#0D0A08; --bg1:#171210; --bg2:#221A15;
+  --card:rgba(255,255,255,.045);
+  --ink:#FFFFFF; --dim:#A89890; --dim2:#7A6A60;
+  --line:rgba(255,199,44,.16);
+  --jelly:cubic-bezier(.34,1.42,.48,1);
+  --shadow-deep:0 30px 70px rgba(0,0,0,.6);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  background:
+    radial-gradient(70% 50% at 50% 8%, rgba(255,199,44,.10) 0%, rgba(255,199,44,0) 62%),
+    radial-gradient(90% 70% at 50% 100%, rgba(218,41,28,.10) 0%, rgba(218,41,28,0) 60%),
+    linear-gradient(180deg,var(--bg1) 0%, var(--bg0) 55%, #0A0806 100%);
+  color:var(--ink);min-height:100vh;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Helvetica Neue","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;overflow-x:hidden}
+
+.app{max-width:1180px;margin:0 auto;padding:18px 26px 22px;display:flex;flex-direction:column;gap:14px;min-height:100vh}
+
+/* ---------------- 顶栏 ---------------- */
+.topbar{display:flex;align-items:center;gap:14px;
+  background:linear-gradient(180deg,rgba(255,199,44,.07),rgba(255,255,255,.02));
+  border:1px solid var(--line);border-radius:999px;padding:9px 16px;
+  box-shadow:0 10px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.06);
+  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.brand{display:flex;align-items:center;gap:12px;flex:none}
+.brand .msvg{width:34px;height:27px;filter:drop-shadow(0 0 10px rgba(255,199,44,.5))}
+.brand .ttl{font-size:21px;font-weight:800;letter-spacing:.5px;
+  background:linear-gradient(180deg,#FFE79A,#FFC72C 70%,#D99B00);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.tabs{display:flex;gap:4px;flex:1;justify-content:center;flex-wrap:wrap}
+.tab{border:none;background:transparent;color:var(--dim);cursor:pointer;
+  border-radius:999px;padding:8px 17px;font-size:13.5px;font-weight:600;font-family:inherit;
+  transition:.18s;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+.tab:hover{color:#fff}
+.tab.on{background:linear-gradient(180deg,#FFD95E,var(--gold) 65%,var(--gold-d));color:#3A2600;
+  font-weight:800;box-shadow:0 4px 16px rgba(255,199,44,.4)}
+.tab kbd{font-family:inherit;font-size:9px;font-weight:800;color:inherit;opacity:.45;
+  border:1px solid currentColor;border-radius:4px;padding:0 3px;line-height:1.3}
+.tab.on kbd{opacity:.55}
+.tab.more{color:var(--gold);border:1px dashed rgba(255,199,44,.5);background:rgba(255,199,44,.07)}
+.tab.more:hover{background:rgba(255,199,44,.16);border-color:var(--gold)}
+
+.cartbtn{position:relative;flex:none;width:42px;height:42px;border-radius:50%;
+  border:1px solid var(--line);background:rgba(255,255,255,.05);cursor:pointer;
+  display:flex;align-items:center;justify-content:center;color:var(--gold);transition:.18s}
+.cartbtn:hover{background:rgba(255,199,44,.14);border-color:var(--gold)}
+.cartbtn svg{width:19px;height:19px}
+.cartbtn .badge{position:absolute;right:-3px;top:-3px;min-width:19px;height:19px;border-radius:999px;
+  background:var(--red);color:#fff;font-size:10px;font-weight:800;line-height:19px;text-align:center;
+  padding:0 5px;box-shadow:0 2px 8px rgba(218,41,28,.6)}
+.orderbtn{flex:none;border:none;cursor:pointer;border-radius:999px;padding:11px 22px;
+  background:linear-gradient(180deg,#FFD95E,var(--gold) 65%,var(--gold-d));
+  color:#3A2600;font-size:13.5px;font-weight:800;font-family:inherit;
+  box-shadow:0 6px 20px rgba(255,199,44,.34);transition:.16s}
+.orderbtn:hover{filter:brightness(1.06)}
+.orderbtn:active{transform:translateY(1px)}
+.orderbtn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ---------------- 弧形舞台 ---------------- */
+.hero{position:relative;flex:1;min-height:330px;display:flex;flex-direction:column;justify-content:center}
+.arcline{position:absolute;left:0;right:0;top:4%;height:72%;pointer-events:none;z-index:0}
+.arcline svg{width:100%;height:100%;overflow:visible}
+.cards{display:flex;align-items:flex-end;justify-content:center;gap:6px;position:relative;z-index:2}
+.citem{position:relative;cursor:pointer;transition:transform .55s var(--jelly),opacity .4s,filter .4s;
+  flex:none;will-change:transform,filter}
+.citem .disc{width:100%;aspect-ratio:1;border-radius:50%;overflow:hidden;position:relative;
+  background:linear-gradient(160deg,#2A211B,#171210);
+  border:1px solid rgba(255,199,44,.22);
+  box-shadow:0 18px 44px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.08)}
+.citem .disc img{width:100%;height:100%;object-fit:cover;display:block}
+.citem.dim .disc::after{content:"";position:absolute;inset:0;
+  background:linear-gradient(180deg,rgba(13,10,8,.15),rgba(13,10,8,.62))}
+.citem .cap{position:absolute;left:50%;transform:translateX(-50%);bottom:-46px;width:230px;
+  text-align:center;opacity:0;transition:.35s;pointer-events:none}
+.citem.on .cap{opacity:1;bottom:-52px}
+.citem .cap .nm{font-size:15px;font-weight:700;line-height:1.3;color:#fff;
+  text-shadow:0 2px 12px rgba(0,0,0,.9);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.citem .cap .pr{font-size:22px;font-weight:800;color:var(--gold);letter-spacing:-.3px;
+  text-shadow:0 0 24px rgba(255,199,44,.5)}
+.citem.on .disc{border-color:rgba(255,199,44,.85);
+  box-shadow:0 0 0 5px rgba(255,199,44,.16),0 0 60px rgba(255,199,44,.34),0 26px 60px rgba(0,0,0,.6)}
+.citem:hover .disc{border-color:var(--gold)}
+
+.arrow{position:absolute;top:46%;transform:translateY(-50%);z-index:5;width:44px;height:44px;
+  border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--gold);
+  cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:17px;
+  transition:.16s;backdrop-filter:blur(8px)}
+.arrow:hover{background:rgba(255,199,44,.18);border-color:var(--gold);transform:translateY(-50%) scale(1.08)}
+.arrow.l{left:2%} .arrow.r{right:2%}
+
+.hint{margin-top:30px;text-align:center;font-size:12px;color:var(--dim2)}
+.hint kbd{display:inline-block;padding:1px 6px;border:1px solid rgba(255,255,255,.16);border-radius:5px;
+  font-size:11px;font-weight:700;color:var(--dim);font-family:inherit;margin:0 1px}
+.hint b{color:var(--gold)}
+
+/* ---------------- 托盘 + 小票 ---------------- */
+.bottom{display:grid;grid-template-columns:1fr 322px;gap:18px;align-items:end}
+@media(max-width:900px){.bottom{grid-template-columns:1fr}}
+
+.trayzone{position:relative;padding:14px 0 4px}
+.tray{position:relative;border-radius:22px;padding:18px 22px;
+  background-color:#8C110D;
+  background-image:
+    linear-gradient(180deg,rgba(10,7,5,.34) 0%,rgba(10,7,5,.52) 55%,rgba(10,7,5,.62) 100%),
+    url(/assets/tray.webp);
+  background-size:cover;background-position:50% 46%;
+  box-shadow:0 26px 60px rgba(0,0,0,.6),inset 0 0 0 1px rgba(255,255,255,.12),
+    inset 0 -14px 34px rgba(0,0,0,.5);
+  display:flex;align-items:center;justify-content:center;gap:14px;min-height:146px;
+  border:1px solid rgba(255,199,44,.14);overflow:hidden}
+.tray::before{content:"";position:absolute;left:0;right:0;top:0;height:40%;
+  background:linear-gradient(180deg,rgba(255,214,120,.10),rgba(255,214,120,0));
+  pointer-events:none}
+.tray .empty{color:rgba(255,255,255,.62);font-size:13px;font-weight:600;text-align:center;line-height:1.7}
+.tray .food{position:relative;width:96px;height:96px;border-radius:50%;overflow:hidden;cursor:pointer;
+  border:2px solid rgba(255,255,255,.22);box-shadow:0 12px 26px rgba(0,0,0,.45);
+  transition:transform .2s;flex:none;background:#2A211B}
+.tray .food:hover{transform:translateY(-4px) scale(1.03)}
+.tray .food img{width:100%;height:100%;object-fit:cover;display:block}
+/* 数量: 右下角金色 */
+.tray .food .q{position:absolute;right:-3px;bottom:-3px;min-width:22px;height:22px;border-radius:999px;
+  background:var(--gold);color:#3A2600;font-size:11px;font-weight:900;line-height:22px;text-align:center;
+  padding:0 5px;box-shadow:0 2px 8px rgba(0,0,0,.5)}
+/* 删除: 左上角红色, hover 才出现(避免误触) */
+.tray .food .del{position:absolute;left:-5px;top:-5px;width:24px;height:24px;border-radius:50%;
+  background:var(--red);color:#fff;border:2px solid rgba(255,255,255,.85);
+  font-size:14px;font-weight:900;line-height:1;display:none;align-items:center;justify-content:center;
+  cursor:pointer;box-shadow:0 3px 10px rgba(0,0,0,.55);z-index:4;padding:0;font-family:inherit}
+.tray .food:hover .del{display:flex}
+.tray .food .del:hover{background:#8C110D;transform:scale(1.12)}
+.trayacts{text-align:center;margin-top:9px;min-height:18px}
+.linkbtn{background:none;border:none;color:#FF8A75;font-size:11.5px;font-weight:700;
+  cursor:pointer;font-family:inherit;padding:2px 8px;border-radius:8px;transition:.15s}
+.linkbtn:hover{background:rgba(218,41,28,.16);text-decoration:underline}
+
+.receipt{position:relative;background:linear-gradient(180deg,#FDFBF4,#F4EFE2);
+  color:#241C16;border-radius:10px 10px 4px 4px;padding:15px 17px 11px;
+  box-shadow:0 22px 50px rgba(0,0,0,.5);
+  font-family:"SF Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  clip-path:polygon(0 0,100% 0,100% calc(100% - 9px),96% 100%,92% calc(100% - 9px),88% 100%,
+    84% calc(100% - 9px),80% 100%,76% calc(100% - 9px),72% 100%,68% calc(100% - 9px),64% 100%,
+    60% calc(100% - 9px),56% 100%,52% calc(100% - 9px),48% 100%,44% calc(100% - 9px),40% 100%,
+    36% calc(100% - 9px),32% 100%,28% calc(100% - 9px),24% 100%,20% calc(100% - 9px),16% 100%,
+    12% calc(100% - 9px),8% 100%,4% calc(100% - 9px),0 100%)}
+.receipt h4{font-size:13px;font-weight:800;text-align:center;letter-spacing:.16em;margin-bottom:9px}
+.receipt .rl{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;
+  border-bottom:1px dashed rgba(36,28,22,.16)}
+.receipt .rl .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.receipt .rl .q{flex:none;font-size:10.5px;font-weight:800;color:#8B7B6C;
+  background:rgba(36,28,22,.06);border-radius:4px;padding:0 4px;margin-right:2px}
+.receipt .rl .v{font-weight:800;flex:none}
+.receipt .rt{display:flex;justify-content:space-between;font-size:13.5px;font-weight:900;
+  margin-top:9px;padding-top:7px;border-top:2px solid rgba(36,28,22,.75)}
+.receipt .rt .v{color:var(--red)}
+.receipt .rsub{text-align:center;font-size:9px;color:#8B7B6C;margin-top:7px;letter-spacing:.06em}
+.receipt .rvoid{text-align:center;font-size:11.5px;color:#9A8A7A;padding:10px 0}
+
+/* ---------------- AI 助手 ---------------- */
+.ai{background:linear-gradient(170deg,rgba(255,199,44,.075),rgba(255,255,255,.025));
+  border:1px solid var(--line);border-radius:22px;padding:16px 19px;
+  box-shadow:0 16px 44px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.06)}
+.ai-head{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.ai-bot{width:44px;height:44px;border-radius:14px;flex:none;display:flex;align-items:center;
+  justify-content:center;background:linear-gradient(160deg,rgba(255,199,44,.26),rgba(255,199,44,.08));
+  border:1px solid var(--line)}
+.ai-bot svg{width:24px;height:24px;stroke:var(--gold)}
+.ai-head .t{font-size:14.5px;font-weight:800}
+.ai-head .d{font-size:11.5px;color:var(--dim);margin-top:1px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:11px}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.045);color:#DCCFC7;border-radius:11px;padding:7px 12px;
+  font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.16s}
+.chip:hover{border-color:var(--gold);color:#fff;background:rgba(255,199,44,.12)}
+.chip svg{width:14px;height:14px;stroke:var(--gold);flex:none}
+.ai-row{display:flex;gap:9px;align-items:center}
+.ai-row input{flex:1;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.12);
+  border-radius:13px;padding:12px 16px;color:#fff;font-size:13.5px;font-family:inherit;outline:none}
+.ai-row input::placeholder{color:#6E5F56}
+.ai-row input:focus{border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,199,44,.13)}
+.send{flex:none;border:none;cursor:pointer;border-radius:13px;padding:12px 26px;
+  background:linear-gradient(180deg,#FFD95E,var(--gold) 65%,var(--gold-d));color:#3A2600;
+  font-size:13.5px;font-weight:800;font-family:inherit;display:inline-flex;align-items:center;gap:7px;
+  box-shadow:0 6px 20px rgba(255,199,44,.32);transition:.16s}
+.send:hover{filter:brightness(1.06)}
+.send:disabled{opacity:.5;cursor:not-allowed}
+.send svg{width:15px;height:15px}
+.msg{font-size:11.5px;color:var(--dim);margin-top:9px;min-height:1em;line-height:1.5}
+.msg.err{color:#FF8A75}
+.msg.ok{color:#6EDFA0}
+
+/* AI 分析条 */
+.analysis{display:none;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,255,255,.08);
+  grid-template-columns:auto 1fr auto;gap:16px;align-items:center}
+.analysis.on{display:grid}
+.a-block{display:flex;align-items:center;gap:10px}
+.a-block .ic{width:34px;height:34px;border-radius:11px;display:flex;align-items:center;justify-content:center;
+  background:rgba(255,199,44,.12);border:1px solid var(--line);flex:none}
+.a-block .ic svg{width:17px;height:17px;stroke:var(--gold)}
+.a-block .lb{font-size:10px;color:var(--dim2);font-weight:700;letter-spacing:.04em}
+.a-block .vv{font-size:19px;font-weight:900;line-height:1.1}
+.a-block .vv small{font-size:10px;color:var(--dim);font-weight:700;margin-left:2px}
+.a-block .adv{font-size:11.5px;color:#D9CCC4;line-height:1.45;max-width:340px}
+.avatab{display:none}
+.ver{text-align:center;font-size:10px;color:var(--dim2);letter-spacing:.03em;padding:2px 0 4px;
+  opacity:.75}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="topbar">
+    <div class="brand">
+      <svg class="msvg" viewBox="0 0 120 96" fill="none"><g stroke="#FFC72C" stroke-width="15">
+        <path d="M12 88 C12 30 26 6 42 6 C58 6 68 30 68 88"/>
+        <path d="M52 88 C52 30 66 6 82 6 C98 6 108 30 108 88"/></g></svg>
+      <div class="ttl">今日菜单</div>
+    </div>
+    <nav class="tabs" id="tabs"></nav>
+    <button class="cartbtn" id="cartBtn" title="餐盘">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <path d="M4 5h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L22 8H6.5"/>
+        <circle cx="10" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/></svg>
+      <span class="badge" id="cartBadge">0</span>
+    </button>
+    <button class="orderbtn" id="btnConfirm" disabled>我的订单</button>
+  </header>
+
+  <section class="hero">
+    <div class="arcline">
+      <svg viewBox="0 0 1000 300" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="ag" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#FFC72C" stop-opacity="0"/>
+            <stop offset=".18" stop-color="#FFC72C" stop-opacity=".55"/>
+            <stop offset=".5" stop-color="#FFE27A" stop-opacity=".85"/>
+            <stop offset=".82" stop-color="#FFC72C" stop-opacity=".55"/>
+            <stop offset="1" stop-color="#FFC72C" stop-opacity="0"/>
+          </linearGradient>
+          <filter id="glow"><feGaussianBlur stdDeviation="3" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+        </defs>
+        <path d="M 40 268 Q 500 24 960 268" stroke="url(#ag)" stroke-width="2" fill="none" filter="url(#glow)"/>
+        <path d="M 40 268 Q 500 24 960 268" stroke="rgba(255,199,44,.14)" stroke-width="10" fill="none"/>
+        <circle cx="140" cy="216" r="3.2" fill="#FFC72C" opacity=".9" filter="url(#glow)"/>
+        <circle cx="330" cy="132" r="3.2" fill="#FFE27A" opacity=".95" filter="url(#glow)"/>
+        <circle cx="670" cy="132" r="3.2" fill="#FFE27A" opacity=".95" filter="url(#glow)"/>
+        <circle cx="860" cy="216" r="3.2" fill="#FFC72C" opacity=".9" filter="url(#glow)"/>
+      </svg>
+    </div>
+
+    <button class="arrow l" id="arrowL" title="上一款">‹</button>
+    <div class="cards" id="cards"></div>
+    <button class="arrow r" id="arrowR" title="下一款">›</button>
+
+    <div class="hint"><kbd>1</kbd>-<kbd>6</kbd> 切分类 · <kbd>7</kbd> 换一组 · <kbd>8</kbd> 确认订单 · <kbd>←</kbd> <kbd>→</kbd> 换套餐 · <kbd>Enter</kbd> 加入 · <b>点图直接加购</b></div>
+  </section>
+
+  <section class="bottom">
+    <div class="trayzone">
+      <div class="tray" id="tray">
+        <div class="empty">托盘空着<br>转旋钮或点上面的套餐加入</div>
+      </div>
+      <div class="trayacts" id="trayActs" style="display:none">
+        <button class="linkbtn" id="btnClear">清空餐盘</button>
+        <span style="font-size:10.5px;color:var(--dim2)">· 鼠标悬停餐品可删减</span>
+      </div>
+    </div>
+
+    <div class="receipt" id="receipt">
+      <h4>订 单 明 细</h4>
+      <div class="rvoid">还没有选餐</div>
+    </div>
+  </section>
+
+  <section class="ai">
+    <div class="ai-head">
+      <div class="ai-bot">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="4" y="7.5" width="16" height="12" rx="3.5"/>
+          <path d="M12 3.2v4.3"/><circle cx="12" cy="2.6" r="1.1"/>
+          <circle cx="9" cy="13" r="1.15" fill="currentColor" stroke="none"/>
+          <circle cx="15" cy="13" r="1.15" fill="currentColor" stroke="none"/>
+          <path d="M9.6 16.4h4.8"/>
+        </svg>
+      </div>
+      <div>
+        <div class="t">AI 定制助手</div>
+        <div class="d">告诉我你的需求，我来帮你配一单 —— 价格最终由麦当劳 MCP 算</div>
+      </div>
+    </div>
+
+    <div class="chips">
+      <button class="chip" data-ask="按人数定制" data-fill="2 人，预算 60 元">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><path d="M16 20v-1.6a3.4 3.4 0 0 0-3.4-3.4H6.4A3.4 3.4 0 0 0 3 18.4V20"/><circle cx="9.5" cy="7.4" r="3.4"/><path d="M21 20v-1.6a3.4 3.4 0 0 0-2.6-3.3"/><path d="M15.6 4.2a3.4 3.4 0 0 1 0 6.4"/></svg>
+        按人数定制</button>
+      <button class="chip" data-ask="按预算定制" data-fill="1 人，预算 25 元">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round"><rect x="2.6" y="6" width="18.8" height="12.4" rx="2.6"/><path d="M2.6 10.2h18.8"/><circle cx="17.4" cy="14.6" r="1.1" fill="currentColor" stroke="none"/></svg>
+        按预算定制</button>
+      <button class="chip" data-ask="口味偏好" data-fill="2 人，预算 70 元，喜欢辣味，不要洋葱">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.6S3.4 15.2 3.4 9.4A4.6 4.6 0 0 1 12 6.9a4.6 4.6 0 0 1 8.6 2.5c0 5.8-8.6 11.2-8.6 11.2z"/></svg>
+        口味偏好</button>
+      <button class="chip" data-ask="健康热量分析" data-fill="2 人，预算 60 元，健康一点">
+        <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c4 0 7-2.8 7-6.6 0-4.6-4.4-8.2-5.6-11.4-.4-1.4-2.4-1.4-2.8 0C9.4 6.2 5 9.8 5 14.4 5 18.2 8 21 12 21z"/></svg>
+        健康热量分析</button>
+    </div>
+
+    <div class="ai-row">
+      <input id="ask" placeholder="例如：3 人，预算 80 元，喜欢辣味，不要洋葱">
+      <button class="send" id="btnSend">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 3 10.5 13.5"/><path d="M21 3l-6.6 18-3.9-7.5L3 9.6 21 3z"/></svg>
+        发送</button>
+    </div>
+    <div class="msg" id="msg"></div>
+
+    <div class="analysis" id="analysis">
+      <div class="a-block">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21c4 0 7-2.8 7-6.6 0-4.6-4.4-8.2-5.6-11.4-.4-1.4-2.4-1.4-2.8 0C9.4 6.2 5 9.8 5 14.4 5 18.2 8 21 12 21z"/></svg></div>
+        <div><div class="lb">热量（估算）</div><div class="vv" id="kcal">--</div></div>
+      </div>
+      <div class="a-block">
+        <div class="ic"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.6S3.4 15.2 3.4 9.4A4.6 4.6 0 0 1 12 6.9a4.6 4.6 0 0 1 8.6 2.5c0 5.8-8.6 11.2-8.6 11.2z"/></svg></div>
+        <div><div class="lb">健康建议</div><div class="adv" id="advice">--</div></div>
+      </div>
+      <div style="font-size:9.5px;color:var(--dim2);text-align:right;line-height:1.4">
+        按品类粗算<br>非官方营养数据</div>
+    </div>
+  </section>
+
+  <div class="ver">v1.0 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价</div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+const fmt=n=>(typeof n==='number'?n:0).toFixed(2);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+let CATALOG=[], STATE={cart:[]}, CAT='__all__', BASE=0, ENGINE='local', BUSY=false;
+let CATS=[];                  // 真实分类(来自麦当劳 MCP): [key,label,count]
+const ALL='__all__';
+const PER=6;                  // 每页 6 个分类 + 7 号键换页(8 号键留给确认)
+let PAGE=0;
+const VIS=5;                  // 可见卡片数(奇)
+const HALF=(VIS-1)/2;
+
+function post(path,body){
+  return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body||{})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+}
+/* 分类全部来自 /api/menu 的真实 cat 字段, 按餐品数降序 */
+function buildCats(){
+  const m=new Map();
+  CATALOG.forEach(c=>{ const k=c.cat||'其他'; m.set(k,(m.get(k)||0)+1); });
+  const arr=[...m.entries()].sort((a,b)=>b[1]-a[1]);
+  CATS=[[ALL,'全部',CATALOG.length], ...arr.map(([k,v])=>[k,k,v])];
+}
+function list(){ return CAT===ALL?CATALOG:CATALOG.filter(c=>(c.cat||'其他')===CAT); }
+function imgOf(c){ return (c&&(c.localImg||c.image))||''; }
+function setImg(el,c){
+  const local=c.localImg, remote=c.image;
+  el.onerror=()=>{ if(remote&&el.src!==remote&&local) el.src=remote; else el.style.opacity=0; };
+  el.src=local||remote||'';
+}
+
+/* ---------------- 顶部分类 ---------------- */
+/* 每页 6 个真实分类, 7 号键换下一组(8 号键留给确认订单) */
+function pageTabs(){
+  const start=PAGE*PER;
+  return {slice:CATS.slice(start,start+PER), hasMore:CATS.length>start+PER};
+}
+function renderTabs(){
+  const {slice,hasMore}=pageTabs();
+  let html=slice.map(([k,label],i)=>
+    `<button class="tab ${CAT===k?'on':''}" data-c="${esc(k)}"><kbd>${i+1}</kbd>${esc(label)}</button>`
+  ).join('');
+  if(hasMore) html+=`<button class="tab more" data-more="1"><kbd>7</kbd>换一组 ›</button>`;
+  $('tabs').innerHTML=html;
+  $('tabs').querySelectorAll('.tab').forEach(b=>{
+    b.onclick=()=>{ if(b.dataset.more) nextPage(); else setCat(b.dataset.c); };
+  });
+}
+function setCat(k){
+  CAT=k; BASE=0; renderTabs();
+  const L=list();
+  if(L.length){
+    STATE.selected=L[0].name;
+    renderCards();
+    post('/api/select',{index:CATALOG.indexOf(L[0])});
+  }else renderCards();
+}
+function nextPage(){
+  const pages=Math.max(1,Math.ceil(CATS.length/PER));
+  PAGE=(PAGE+1)%pages;
+  renderTabs();
+}
+
+/* ---------------- 弧形卡片 ---------------- */
+function renderCards(){
+  const L=list(), box=$('cards');
+  if(!L.length){ box.innerHTML=''; return; }
+  const idx=L.findIndex(c=>c.name===STATE.selected);
+  if(idx>=0) BASE=idx;
+  if(BASE>=L.length) BASE=0;
+
+  if(box.children.length!==VIS){
+    box.innerHTML='';
+    for(let i=0;i<VIS;i++){
+      const d=document.createElement('div');
+      d.className='citem';
+      d.innerHTML='<div class="disc"><img alt=""></div>'+
+                  '<div class="cap"><div class="nm"></div><div class="pr"></div></div>';
+      box.appendChild(d);
+    }
+  }
+  // 尺寸: 以中心为基准
+  const w=box.getBoundingClientRect().width||1100;
+  const mid=Math.min(300, Math.max(200, w*0.26));
+  const sizes={0:mid,1:mid*0.64,2:mid*0.46};
+  const lift={0:-46,1:-6,2:34};
+  const opa={0:1,1:.72,2:.40};
+  const blur={0:0,1:1.2,2:2.6};
+
+  [...box.children].forEach((el,k)=>{
+    const off=k-HALF, a=Math.abs(off);
+    const item=L[((BASE+off)%L.length+L.length)%L.length];
+    const sz=sizes[a], isMid=a===0;
+
+    el.style.width=sz+'px';
+    el.style.transform=`translateY(${lift[a]}px)`;
+    el.style.opacity=opa[a];
+    el.style.filter=blur[a]?`blur(${blur[a]}px)`:'none';
+    el.style.zIndex=10-a;
+    el.classList.toggle('on',isMid);
+    el.classList.toggle('dim',!isMid);
+
+    if(el.dataset.code!==item.code){
+      el.dataset.code=item.code;
+      const img=el.querySelector('img'); img.style.opacity=1;
+      setImg(img,item);
+      el.querySelector('.nm').textContent=item.name;
+      el.querySelector('.pr').textContent='¥'+fmt(item.price);
+    }
+    el.onclick=()=>addItem(item);
+  });
+}
+
+/* ---------------- 加购 ---------------- */
+function say(t){ $('msg').className='msg'; $('msg').textContent=t; }
+function addItem(item){
+  post('/api/select',{index:CATALOG.indexOf(item)});
+  post('/api/add',{code:item.code}).then(()=>{ poll(); say('已加入 '+item.name); });
+}
+function removeItem(code){ post('/api/remove',{code,qty:1}).then(poll); }
+
+/* ---------------- 托盘 / 小票 ---------------- */
+function renderTray(){
+  const cart=STATE.cart||[];
+  const tray=$('tray');
+  if(!cart.length){
+    tray.innerHTML='<div class="empty">托盘空着<br>转旋钮或点上面的套餐加入</div>';
+  }else{
+    tray.innerHTML=cart.map(i=>{
+      const c=CATALOG.find(x=>x.code===i.code)||{};
+      return `<div class="food" data-code="${esc(i.code)}" title="${esc(i.name)}">
+        <img src="${esc(imgOf(c))}" alt="" onerror="this.style.opacity=0">
+        <button class="del" data-code="${esc(i.code)}" title="减少一份">×</button>
+        <span class="q">${i.qty}</span></div>`;
+    }).join('');
+    // 只有 × 能删, 点图片不再误删
+    tray.querySelectorAll('.del').forEach(b=>{
+      b.onclick=e=>{ e.stopPropagation(); removeItem(b.dataset.code); };
+    });
+  }
+  $('trayActs').style.display=cart.length?'block':'none';
+
+  const rc=$('receipt');
+  const p=STATE.price||{};
+  if(!cart.length){
+    rc.innerHTML='<h4>订 单 明 细</h4><div class="rvoid">还没有选餐</div>';
+  }else{
+    rc.innerHTML='<h4>订 单 明 细</h4>'+
+      cart.map(i=>`<div class="rl"><span class="n">${esc(i.name)}</span>`+
+        `<span class="q">×${i.qty}</span>`+
+        `<span class="v">¥${fmt(i.subtotal)}</span></div>`).join('')+
+      `<div class="rt"><span>合计</span><span class="v">¥${fmt(p.payable)}</span></div>`+
+      (p.discount>0?`<div class="rsub">已优惠 ¥${fmt(p.discount)}</div>`:'')+
+      `<div class="rsub">价格来自麦当劳 MCP 实时核价</div>`;
+  }
+
+  const n=cart.reduce((s,i)=>s+i.qty,0);
+  $('cartBadge').textContent=n;
+  $('cartBadge').style.display=n?'block':'none';
+  $('btnConfirm').disabled=!n;
+  renderAnalysis(cart);
+}
+
+/* ---------------- 热量估算(粗算, 非官方) ---------------- */
+const KCAL={main:560,side:280,drink:165,other:230};
+function renderAnalysis(cart){
+  const box=$('analysis');
+  if(!cart.length){ box.classList.remove('on'); return; }
+  box.classList.add('on');
+  let kcal=0, main=0, side=0, drink=0;
+  cart.forEach(i=>{
+    const k=KCAL[i.role]||200;
+    kcal+=k*i.qty;
+    if(i.role==='main') main+=i.qty;
+    if(i.role==='side') side+=i.qty;
+    if(i.role==='drink') drink+=i.qty;
+  });
+  $('kcal').innerHTML=Math.round(kcal)+'<small>kcal</small>';
+  const tips=[];
+  if(main&&!side) tips.push('只有主食，加一份小食（沙拉/玉米）更均衡');
+  if(main&&!drink) tips.push('没有饮品，建议配无糖可乐或纯牛奶');
+  if(side) tips.push('小食已搭配，注意油炸类控制份量');
+  if(drink>=2) tips.push('饮品偏多，建议换一杯为水');
+  if(!tips.length) tips.push('搭配比较均衡，注意总热量即可');
+  $('advice').textContent=tips.join('；')+'。';
+}
+
+/* ---------------- 轮询 ---------------- */
+async function poll(){
+  try{
+    const r=await fetch('/api/state'); STATE=await r.json();
+    renderCards(); renderTray();
+  }catch(e){}
+}
+
+/* ---------------- 旋转 ---------------- */
+function rotate(d){
+  const L=list(); if(!L.length) return;
+  BASE=((BASE+d)%L.length+L.length)%L.length;
+  const item=L[BASE];
+  STATE.selected=item.name;
+  renderCards();
+  post('/api/select',{index:CATALOG.indexOf(item)});
+}
+
+/* ---------------- 键盘 ---------------- */
+document.addEventListener('keydown',e=>{
+  if(['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
+  if(/^[1-8]$/.test(e.key)){          // 1-6 切分类 / 7 换一组 / 8 确认订单
+    const n=parseInt(e.key,10);
+    if(n===8){ e.preventDefault(); confirmOrder(); return; }
+    const {slice,hasMore}=pageTabs();
+    if(n<=slice.length){ e.preventDefault(); setCat(slice[n-1][0]); }
+    else if(n===7&&CATS.length>PER){ e.preventDefault(); nextPage(); }  // 末页按 7 回到第一页
+    return;
+  }
+  if(e.key==='ArrowLeft'){ e.preventDefault(); rotate(-1); }
+  else if(e.key==='ArrowRight'){ e.preventDefault(); rotate(1); }
+  else if(e.key==='Enter'){
+    const L=list(), cur=L[BASE];
+    if(cur){ e.preventDefault(); addItem(cur); }
+  }
+});
+
+/* ---------------- AI 助手 ---------------- */
+function parseAsk(text){
+  const t=String(text||'');
+  const people=(t.match(/(\d+)\s*(?:人|位)/)||[])[1];
+  const budget=(t.match(/预算\s*(\d+)/)||t.match(/(\d+)\s*元/)||[])[1];
+  const avoid=[];
+  const re=/不要\s*([^\s,，。;；]+)/g; let m;
+  while((m=re.exec(t))){ if(m[1]&&avoid.indexOf(m[1])<0) avoid.push(m[1]); }
+  const spicy=/辣/.test(t);
+  return {people:people?+people:2, budget:budget?+budget:60, avoid, spicy};
+}
+async function ask(){
+  if(BUSY) return;
+  const text=$('ask').value.trim();
+  if(!text){ $('msg').className='msg err'; $('msg').textContent='先说一句你的需求，比如「2 人 预算 60 元」'; return; }
+  const q=parseAsk(text);
+  BUSY=true; $('btnSend').disabled=true;
+  $('msg').className='msg'; $('msg').textContent='AI 正在配单…';
+  const r=await post('/api/plan',{
+    people:q.people, budget:q.budget, avoid:q.avoid.join(','), engine:ENGINE
+  });
+  BUSY=false; $('btnSend').disabled=false;
+  if(r&&r.error){
+    $('msg').className='msg err';
+    $('msg').textContent='配单失败：'+r.error+(r.note?('（'+r.note+'）'):'');
+  }else{
+    $('msg').className='msg ok';
+    $('msg').textContent=`已按 ${q.people} 人 / 预算 ${q.budget} 元配好 · 应付 ¥${fmt(r.payable)}`+
+      (r.discount>0?` · 省 ¥${fmt(r.discount)}`:'')+
+      (r.balance>0?` · 再加 ¥${fmt(r.balance)} 解锁 ${r.next}`:'')+
+      (r.engine==='llm'?` · ${r.model}`:'');
+  }
+  poll();
+}
+
+/* ---------------- 绑定 ---------------- */
+$('btnSend').onclick=ask;
+$('ask').addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); ask(); } });
+document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
+  $('ask').value=c.dataset.fill||'';
+  $('ask').focus();
+});
+$('cartBtn').onclick=()=>{ window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); };
+function confirmOrder(){
+  if(!(STATE.cart||[]).length) return;
+  post('/api/key',{key:8}).then(r=>{
+    const p=(r&&r.price)||STATE.price||{};
+    $('msg').className='msg ok';
+    $('msg').textContent=`订单已确认 · 应付 ¥${fmt(p.payable)}`+(p.discount>0?` · 省 ¥${fmt(p.discount)}`:'');
+    poll();
+  });
+}
+$('btnConfirm').onclick=confirmOrder;
+$('btnClear').onclick=()=>{
+  post('/api/clear').then(()=>{ poll(); say('餐盘已清空'); });
+};
+$('arrowL').onclick=()=>rotate(-1);
+$('arrowR').onclick=()=>rotate(1);
+
+/* ---------------- 启动 ---------------- */
+(async function init(){
+  try{
+    const d=await (await fetch('/api/menu')).json();
+    CATALOG=d.catalog||[];
+    buildCats();                 // 分类取自 MCP 真实 cat 字段
+    await poll();
+    renderTabs(); renderCards();
+    // 默认填一句示例
+    $('ask').placeholder='例如：3 人，预算 80 元，喜欢辣味，不要洋葱';
+  }catch(e){
+    $('msg').className='msg err'; $('msg').textContent='未连接到点餐服务';
+  }
+})();
+window.addEventListener('resize',()=>renderCards());
+setInterval(poll,1200);
+</script>
+</body>
+</html>

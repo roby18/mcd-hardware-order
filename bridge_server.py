@@ -795,6 +795,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, "index.html 不存在")
             return
 
+        if path == "/stage":
+            p = os.path.join(WEB_DIR, "stage.html")
+            if os.path.exists(p):
+                with open(p, "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            else:
+                self._send(404, "stage.html 不存在")
+            return
+
+        if path == "/radial":
+            p = os.path.join(WEB_DIR, "radial.html")
+            if os.path.exists(p):
+                with open(p, "rb") as f:
+                    self._send(200, f.read(), "text/html; charset=utf-8")
+            else:
+                self._send(404, "radial.html 不存在")
+            return
+
         if path == "/detective":
             p = os.path.join(WEB_DIR, "detective.html")
             if os.path.exists(p):
@@ -822,6 +840,21 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/events":
             self._sse()
+            return
+
+        # 静态素材: /assets/<file> (生成的托盘底图等, 随仓库提交)
+        if path.startswith("/assets/"):
+            name = os.path.basename(path[len("/assets/"):])
+            p = os.path.join(WEB_DIR, "assets", name)
+            if name and os.path.exists(p):
+                ext = os.path.splitext(name)[1].lower()
+                ctype = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+                         ".webp": "image/webp", ".svg": "image/svg+xml"}.get(
+                    ext, "application/octet-stream")
+                with open(p, "rb") as f:
+                    self._send(200, f.read(), ctype)
+            else:
+                self._json({"error": "asset not found"}, 404)
             return
 
         # 菜品图片本地缓存: /img/<code>.png (断网可演示)
