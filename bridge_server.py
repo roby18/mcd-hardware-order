@@ -23,6 +23,35 @@ import argparse
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+
+def _autoload_env():
+    """本地调试便利: 关键环境变量未设置时, 尝试从项目外 .workbuddy/credentials-*.env 读取。
+    仅本地开发用; 文件缺失或变量已设置则跳过, 不影响部署(部署仍走环境变量)。
+    必须在 import mcd_saver 之前调用, 确保麦当劳 Token 就位。"""
+    import glob
+    here = os.path.dirname(os.path.abspath(__file__))
+    want = ("MCD_MCP_TOKEN", "MCD_MCP_ENDPOINT",
+            "YUANBAO_API_KEY", "TENCENTCLOUD_WSA_APIKEY")
+    for base in (os.path.join(here, "..", "..", ".workbuddy"),
+                 os.path.join(here, "..", ".workbuddy"),
+                 os.path.join(here, ".workbuddy")):
+        for path in glob.glob(os.path.join(base, "credentials-*.env")):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        line = line.strip()
+                        if not line or line.startswith("#") or "=" not in line:
+                            continue
+                        k, v = line.split("=", 1)
+                        k, v = k.strip(), v.strip()
+                        if k in want and v and k not in os.environ:
+                            os.environ[k] = v
+            except Exception:
+                pass
+
+
+_autoload_env()
+
 # 复用已跑通的麦当劳 MCP 封装
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                 "..", "dine-mcd-saver", "scripts"))
