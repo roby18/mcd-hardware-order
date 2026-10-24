@@ -21,6 +21,8 @@ import time
 import threading
 import argparse
 import urllib.request
+import urllib.error
+import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 
@@ -171,7 +173,8 @@ class Bridge:
 
     def llm_chat(self, messages, temperature=0.4, max_tokens=700):
         """OpenAI 兼容 chat/completions。返回 (ok, content_or_error)。
-        兼容推理模型(答案在 content, 思考在 reasoning_content); content 为空时回退 reasoning_content。"""
+        兼容推理模型(答案在 content, 思考在 reasoning_content); content 为空时回退 reasoning_content。
+        429/5xx/超时自动重试(指数退避 2s/4s), 应对路演现场偶发限流。"""
         if not self.llm_ready():
             return False, "大模型未配置完整(base/key/model)"
         url = self.llm["base"].rstrip("/") + "/chat/completions"
@@ -182,19 +185,75 @@ class Bridge:
             "max_tokens": max_tokens,
             "stream": False,
         }, ensure_ascii=False).encode("utf-8")
-        req = urllib.request.Request(url, data=body, method="POST")
-        req.add_header("Authorization", "Bearer " + self.llm["key"])
-        req.add_header("Content-Type", "application/json; charset=utf-8")
-        try:
-            with urllib.request.urlopen(req, timeout=60) as r:
-                d = json.loads(r.read().decode("utf-8"))
-            msg = (d.get("choices") or [{}])[0].get("message") or {}
-            content = (msg.get("content") or "").strip()
-            if not content:
-                content = (msg.get("reasoning_content") or "").strip()
-            return True, content
-        except Exception as e:
-            return False, f"大模型调用失败: {e}"
+        last_err = "未知错误"
+        for attempt in range(3):  # 第 1 次 + 2 次重试
+            req = urllib.request.Request(url, data=body, method="POST")
+            req.add_header("Authorization", "Bearer " + self.llm["key"])
+            req.add_header("Content-Type", "application/json; charset=utf-8")
+            try:
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    d = json.loads(r.read().decode("utf-8"))
+                msg = (d.get("choices") or [{}])[0].get("message") or {}
+                content = (msg.get("content") or "").strip()
+                if not content:
+                    content = (msg.get("reasoning_content") or "").strip()
+                return True, content
+            except urllib.error.HTTPError as e:
+                detail = ""
+                try:
+                    detail = e.read().decode("utf-8", "ignore")[:200]
+                except Exception:
+                    pass
+                if e.code == 429 or 500 <= e.code < 600:
+                    last_err = f"接口繁忙(HTTP {e.code})"
+                    if attempt < 2:
+                        wait = 2 * (2 ** attempt)  # 2s, 4s
+                        print(f"[llm] HTTP {e.code}, {wait}s 后第 {attempt + 2} 次重试...")
+                        time.sleep(wait)
+                        continue
+                else:
+                    return False, f"大模型调用失败: HTTP {e.code} {detail}"
+            except (socket.timeout, TimeoutError):
+                last_err = "接口超时"
+                if attempt < 2:
+                    wait = 2 * (2 ** attempt)
+                    print(f"[llm] 超时, {wait}s 后第 {attempt + 2} 次重试...")
+                    time.sleep(wait)
+                    continue
+            except Exception as e:
+                return False, f"大模型调用失败: {e}"
+        return False, f"{last_err}, 已自动重试 2 次仍失败"
+
+    @staticmethod
+    def _extract_codes(content):
+        """从 LLM 返回中稳健提取 codes 列表, 返回 (codes, reason)。
+        容忍: markdown代码块 / reasoning_content思考杂质 / 多个JSON候选 / 尾随逗号。
+        推理模型偶发把思考过程回灌到正文, 贪婪正则会跨匹配到杂质导致解析失败。"""
+        candidates = []
+        # 1) markdown ```json 代码块优先
+        for m in re.finditer(r"```(?:json)?\s*(\{.*?\})\s*```", content, re.S):
+            candidates.append(m.group(1))
+        # 2) 花括号配平扫描: 从每个 { 开始, 找到平衡的 } 作为候选
+        depth, start = 0, None
+        for i, ch in enumerate(content):
+            if ch == "{":
+                if depth == 0:
+                    start = i
+                depth += 1
+            elif ch == "}" and depth > 0:
+                depth -= 1
+                if depth == 0 and start is not None:
+                    candidates.append(content[start:i + 1])
+                    start = None
+        for raw in reversed(candidates):  # 最后的完整对象优先, 避免采纳思考中的格式示例
+            for text in (raw, re.sub(r",\s*([}\]])", r"\1", raw)):  # 容忍尾随逗号
+                try:
+                    d = json.loads(text)
+                except Exception:
+                    continue
+                if isinstance(d, dict) and isinstance(d.get("codes"), list):
+                    return d["codes"], str(d.get("reason", ""))
+        return None, None
 
     def llm_plan(self, people, budget, avoid):
         """让大模型选餐, 但**价格一律回店用 MCP 真实计算**。
@@ -219,13 +278,10 @@ class Bridge:
         if not ok:
             return {"error": content, "fallback": True}
         # 解析 LLM 返回的 JSON(容忍前后杂质)
-        m = re.search(r"\{.*\}", content, re.S)
-        if not m:
+        print(f"[llm_plan] LLM 原始返回({len(content)}字): {content[:400]}", flush=True)
+        picked, reason = self._extract_codes(content)
+        if not picked:
             return {"error": "大模型返回无法解析", "fallback": True}
-        try:
-            picked = json.loads(m.group(0)).get("codes", [])
-        except Exception:
-            return {"error": "大模型返回 JSON 解析失败", "fallback": True}
         by_code = {c["code"]: c for c in self.catalog}
         combo = []
         for p in picked:
@@ -252,6 +308,8 @@ class Bridge:
         self.broadcast()
         r["engine"] = "llm"
         r["model"] = self.llm["model"]
+        if reason:
+            r["reason"] = reason
         return r
 
     # ------------------------------------------------ 状态快照
