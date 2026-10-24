@@ -52,9 +52,12 @@ def _autoload_env():
 
 _autoload_env()
 
-# 复用已跑通的麦当劳 MCP 封装
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                "..", "dine-mcd-saver", "scripts"))
+# 复用麦当劳 MCP 封装: 仓库内副本优先(克隆即可跑), 其次复用 dine-mcd-saver 开发版
+_here = os.path.dirname(os.path.abspath(__file__))
+_dine_path = os.path.join(_here, "..", "dine-mcd-saver", "scripts")
+if not os.path.exists(os.path.join(_here, "mcd_saver.py")):
+    if os.path.isdir(_dine_path):
+        sys.path.insert(0, _dine_path)
 try:
     import mcd_saver as mcd
 except ImportError:
@@ -167,7 +170,8 @@ class Bridge:
                     and self.llm.get("key") and self.llm.get("model"))
 
     def llm_chat(self, messages, temperature=0.4, max_tokens=700):
-        """OpenAI 兼容 chat/completions。返回 (ok, content_or_error)。"""
+        """OpenAI 兼容 chat/completions。返回 (ok, content_or_error)。
+        兼容推理模型(答案在 content, 思考在 reasoning_content); content 为空时回退 reasoning_content。"""
         if not self.llm_ready():
             return False, "大模型未配置完整(base/key/model)"
         url = self.llm["base"].rstrip("/") + "/chat/completions"
@@ -182,9 +186,13 @@ class Bridge:
         req.add_header("Authorization", "Bearer " + self.llm["key"])
         req.add_header("Content-Type", "application/json; charset=utf-8")
         try:
-            with urllib.request.urlopen(req, timeout=45) as r:
+            with urllib.request.urlopen(req, timeout=60) as r:
                 d = json.loads(r.read().decode("utf-8"))
-            return True, d["choices"][0]["message"]["content"]
+            msg = (d.get("choices") or [{}])[0].get("message") or {}
+            content = (msg.get("content") or "").strip()
+            if not content:
+                content = (msg.get("reasoning_content") or "").strip()
+            return True, content
         except Exception as e:
             return False, f"大模型调用失败: {e}"
 
@@ -205,8 +213,9 @@ class Bridge:
             '{"codes":[{"code":"5022","qty":1}],"reason":"一句话说明"}\n'
             "约束: 份量要够所有人吃饱; 总现价不超过预算; 有主食有小食有饮品; 编号必须来自上面的菜单。"
         )
+        # 推理模型的思考也占用 max_tokens, 给足预算(实测约需 1100+)
         ok, content = self.llm_chat(
-            [{"role": "user", "content": prompt}], temperature=0.3, max_tokens=400)
+            [{"role": "user", "content": prompt}], temperature=0.3, max_tokens=2000)
         if not ok:
             return {"error": content, "fallback": True}
         # 解析 LLM 返回的 JSON(容忍前后杂质)
@@ -228,6 +237,10 @@ class Bridge:
         r = mcd.evaluate(self.store_code, combo)
         if not r or r["payable"] <= 0:
             return {"error": "MCP 算价失败", "fallback": True}
+        # 预算门禁: LLM 只管"选什么", 超预算的组合一律不采纳(与本地算法对齐)
+        if r["payable"] > self.budget + 0.5:
+            return {"error": f"大模型选餐超预算({r['payable']:.0f}>{self.budget:.0f}元)",
+                    "fallback": True}
         with self.lock:
             self.cart.clear()
             for it in combo:
@@ -610,9 +623,9 @@ class Bridge:
                 return r
             r = self.llm_plan(self.people, self.budget, self.avoid)
             if "error" in r and r.get("fallback"):
-                r = self._plan_local()
-                r["note"] = "大模型不可用, 已回退本地算法"
-                return r
+                lr = self._plan_local()
+                lr["note"] = "大模型不可用, 已回退本地算法(" + str(r.get("error", ""))[:60] + ")"
+                return lr
             return r
         return self._plan_local()
 
@@ -843,10 +856,14 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/llm-config":
             if b.get("test"):
-                # 测试连通: 发一条最小请求
-                ok, msg = BRIDGE.llm_chat([{"role": "user", "content": "回复OK两个字"}],
-                                          max_tokens=8)
-                self._json({"ok": ok, "msg": (msg or "")[:120]})
+                # 测试连通: 推理模型思考也占 token, 必须给足 max_tokens 才能拿到正文
+                ok, msg = BRIDGE.llm_chat(
+                    [{"role": "user", "content": "请只回复四个字: 连接正常"}],
+                    max_tokens=2000)
+                empty = ok and not (msg or "").strip()
+                self._json({"ok": ok and not empty,
+                            "msg": ((msg or "").strip()[:120] if not empty
+                                    else "模型返回为空(可能是推理模型或额度不足)")})
                 return
             cfg = BRIDGE.save_llm(b)
             self._json({"ok": True, "llm": cfg})
