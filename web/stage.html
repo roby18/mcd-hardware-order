@@ -95,6 +95,10 @@ body{
   box-shadow:0 0 0 5px rgba(255,199,44,.16),0 0 60px rgba(255,199,44,.34),0 26px 60px rgba(0,0,0,.6)}
 .citem:hover .disc{border-color:var(--gold)}
 
+.closed{width:100%;text-align:center;padding:60px 20px;color:var(--dim);font-size:14px;
+  font-weight:700;line-height:1.9;position:relative;z-index:2}
+.closed small{display:block;font-size:11.5px;color:var(--dim2);font-weight:600;margin-top:4px}
+
 .arrow{position:absolute;top:46%;transform:translateY(-50%);z-index:5;width:44px;height:44px;
   border-radius:50%;border:1px solid var(--line);background:rgba(255,255,255,.05);color:var(--gold);
   cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:17px;
@@ -435,7 +439,7 @@ body{
     </div>
   </section>
 
-  <div class="ver">v1.1 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价</div>
+  <div class="ver">v1.2 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价</div>
 </div>
 
 <!-- 语音浮层 -->
@@ -468,7 +472,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;'
 let CATALOG=[], STATE={cart:[]}, CAT='__all__', BASE=0, ENGINE='local', BUSY=false;
 let CATS=[];                  // 真实分类(来自麦当劳 MCP): [key,label,count]
 const ALL='__all__';
-const PER=6;                  // 每页 6 个分类 + 7 号键换页(8 号键留给确认)
+const PER=7;                  // 归并后共 7 类, 1-7 键正好全覆盖; 若类别超过 7 个, 7 号键转为「换一组」
 let PAGE=0;
 const VIS=5;                  // 可见卡片数(奇)
 const HALF=(VIS-1)/2;
@@ -477,14 +481,38 @@ function post(path,body){
   return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify(body||{})}).then(r=>r.json()).catch(e=>({error:String(e)}));
 }
-/* 分类全部来自 /api/menu 的真实 cat 字段, 按餐品数降序 */
+/* ---------------- 归并分类 ----------------
+   MCP 真实 cat 有 15 个, 太碎。这里按麦当劳真实分类名映射成 7 个语义大类,
+   再用餐品名称做微调(甜品/咖啡/冰品), 保证 122 款都能归到某一类。 */
+const GROUPS=['全部','主食','炸鸡','小食','甜品','饮品','套餐'];
+const CATMAP={
+  '巨无霸牛鱼肉堡':'主食','鸡肉汉堡/卷':'主食','安格斯MAX厚牛堡':'主食',
+  '炸鸡':'炸鸡','蘸酱炸鸡':'炸鸡',
+  '小食甜品/其他':'小食','小食拼盘/多人餐':'小食',
+  '饮品':'饮品','麦咖啡™':'饮品',
+  '人气热卖':'套餐','精选单人餐':'套餐','500大卡套餐':'套餐',
+  '随心配1+1':'套餐','大堡口福单人餐':'套餐','开心乐园':'套餐'
+};
+function groupOf(c){
+  const cat=c.cat||'', n=c.name||'';
+  // 名称优先: 甜品与咖啡藏在混合分类里, 按名称拆
+  if(/派$|冰淇淋|圣代|麦旋风|甜筒|新地|雪糕|蛋糕|布丁|蛋挞|甜品/.test(n)) return '甜品';
+  if(/咖啡|拿铁|美式|卡布|摩卡|澳白/.test(n)) return '饮品';
+  // 套餐要排在"主食"前: 套餐名常带"堡/巨无霸"等主食词, 否则会被误归主食
+  if(/套餐|单人餐|多人餐|乐园|随心配|1\+1|大卡/.test(n)) return '套餐';
+  if(/炸鸡|鸡翅|鸡块|鸡米花|辣翅|鸡排|麦辣/.test(n)) return '炸鸡';
+  if(/薯条|薯格|玉米|沙拉|洋葱圈|小食|拼盘|分享盒/.test(n)) return '小食';
+  if(/可乐|雪碧|果汁|牛奶|豆浆|茶|水|饮/.test(n)) return '饮品';
+  if(/汉堡|堡|卷|麦香|吉士|牛柳|鸡腿堡/.test(n)) return '主食';
+  return CATMAP[cat]||'小食';
+}
 function buildCats(){
   const m=new Map();
-  CATALOG.forEach(c=>{ const k=c.cat||'其他'; m.set(k,(m.get(k)||0)+1); });
-  const arr=[...m.entries()].sort((a,b)=>b[1]-a[1]);
-  CATS=[[ALL,'全部',CATALOG.length], ...arr.map(([k,v])=>[k,k,v])];
+  CATALOG.forEach(c=>{ const g=groupOf(c); m.set(g,(m.get(g)||0)+1); });
+  CATS=[[ALL,'全部',CATALOG.length]];
+  GROUPS.slice(1).forEach(g=>{ if(m.get(g)) CATS.push([g,g,m.get(g)]); });
 }
-function list(){ return CAT===ALL?CATALOG:CATALOG.filter(c=>(c.cat||'其他')===CAT); }
+function list(){ return CAT===ALL?CATALOG:CATALOG.filter(c=>groupOf(c)===CAT); }
 function imgOf(c){ return (c&&(c.localImg||c.image))||''; }
 function setImg(el,c){
   const local=c.localImg, remote=c.image;
@@ -527,7 +555,17 @@ function nextPage(){
 /* ---------------- 弧形卡片 ---------------- */
 function renderCards(){
   const L=list(), box=$('cards');
-  if(!L.length){ box.innerHTML=''; return; }
+  if(!L.length){
+    if(!CATALOG.length){
+      const st=(STATE&&STATE.store)||{};
+      const tm=(st.businessStartTime&&st.businessEndTime)?`${st.businessStartTime}-${st.businessEndTime}`:'';
+      box.innerHTML='<div class="closed">门店当前非营业 '+(tm?'('+esc(tm)+') ':'')+
+        '<small>麦当劳 MCP 暂无在售菜单，营业时间内再来即可</small></div>';
+    }else{
+      box.innerHTML='<div class="closed">该分类暂无在售餐品<small>换一个分类看看</small></div>';
+    }
+    return;
+  }
   const idx=L.findIndex(c=>c.name===STATE.selected);
   if(idx>=0) BASE=idx;
   if(BASE>=L.length) BASE=0;

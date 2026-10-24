@@ -97,6 +97,7 @@ class Bridge:
         self.log = []               # 事件流水, 网页上滚动显示
         self.subscribers = []       # SSE 客户端队列
         self.menu_loaded = False
+        self.menu_cached = False      # True = 当前用的是本地缓存菜单(门店打烊/接口异常)
         self.voice_active = False   # 旋钮按下: 语音交互中
         # 大模型备选引擎(OpenAI 兼容) + 按键映射, 持久化在 config/ 下
         self.llm = {
@@ -340,6 +341,7 @@ class Bridge:
                 "people": self.people,
                 "avoid": self.avoid,
                 "menuLoaded": self.menu_loaded,
+                "menuCached": self.menu_cached,
                 "coupons": self.coupons,
                 "price": {
                     "original": pr.get("original", 0.0),
@@ -460,6 +462,43 @@ class Bridge:
                 self.subscribers.remove(q)
 
     # ------------------------------------------------ 麦当劳调用
+    MENU_CACHE = os.path.join(HERE, "config", "menu_cache.json")
+
+    def _save_menu_cache(self):
+        """菜单拉取成功后落盘, 供门店打烊/断网时回退, 保证演示不白屏。"""
+        try:
+            os.makedirs(os.path.dirname(self.MENU_CACHE), exist_ok=True)
+            with open(self.MENU_CACHE, "w", encoding="utf-8") as f:
+                json.dump({
+                    "ts": time.strftime("%Y-%m-%d %H:%M:%S"),
+                    "storeCode": self.store_code,
+                    "storeInfo": self.store_info,
+                    "catalog": self.catalog,
+                    "coupons": self.coupons,
+                }, f, ensure_ascii=False)
+        except Exception as e:
+            print(f"[cache] 菜单缓存写入失败: {e}")
+
+    def _load_menu_cache(self):
+        try:
+            if not os.path.exists(self.MENU_CACHE):
+                return False
+            with open(self.MENU_CACHE, encoding="utf-8") as f:
+                d = json.load(f)
+            if not d.get("catalog"):
+                return False
+            self.catalog = d["catalog"]
+            self.coupons = d.get("coupons") or []
+            self.store_code = d.get("storeCode") or self.store_code
+            self.store_info = d.get("storeInfo") or self.store_info
+            self.menu_loaded = True
+            self.menu_cached = True
+            self.push_log(f"门店无在售菜单, 已回退缓存(落盘于 {d.get('ts','?')})")
+            return True
+        except Exception as e:
+            print(f"[cache] 菜单缓存读取失败: {e}")
+            return False
+
     def load_menu(self, city=DEFAULT_CITY, keyword=DEFAULT_KEYWORD):
         if mcd is None:
             self.push_log("未找到 mcd_saver 模块, 菜单加载跳过")
@@ -486,8 +525,16 @@ class Bridge:
                 it["localImg"] = "/img/" + it["code"] + ext
             self.menu_loaded = True
             self.push_log(f"菜单已加载: {len(self.catalog)} 款")
+            if not self.catalog:      # 门店打烊时接口返回空列表(不抛异常)
+                self.menu_loaded = False
+                if self._load_menu_cache():
+                    return True
+                return False
+            self._save_menu_cache()
         except Exception as e:
             self.push_log(f"菜单加载失败: {e}")
+            if self._load_menu_cache():
+                return True
             return False
 
         try:

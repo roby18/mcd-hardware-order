@@ -1,4 +1,5 @@
 config/llm.json
+config/menu_cache.json  # 运行期菜单缓存(门店打烊时回退用)
 *.log
 web/img/
 .DS_Store
