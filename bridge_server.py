@@ -22,6 +22,7 @@ import threading
 import argparse
 import urllib.request
 import urllib.error
+import urllib.parse
 import socket
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -651,6 +652,164 @@ class Bridge:
             self.push_log("清空餐盘")
         self.broadcast()
 
+    # ------------------------------------------------ 真实历史订单 (MCP)
+    orders_cache = {"ts": 0.0, "data": None}
+
+    def orders(self, force=False):
+        """
+        麦当劳账号的真实历史订单 (MCP order-list, 非商城订单)。
+        order-list 每次约 1-2 秒且接口有限流, 这里做 45 秒缓存。
+        """
+        now = time.time()
+        cached = self.orders_cache["data"]
+        if (not force) and cached is not None and now - self.orders_cache["ts"] < 45:
+            return dict(cached, cached=True)
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        try:
+            data = mcd.call("order-list", {}) or {}
+        except Exception as e:
+            return {"error": _short_err(e)}
+        out = []
+        for o in data.get("list") or []:
+            items = []
+            for p in o.get("orderProductList") or []:
+                items.append({
+                    "name": p.get("productName", ""),
+                    "code": str(p.get("productCode", "")),
+                    "qty": int(p.get("quantity") or 1),
+                    "subs": [{"name": s.get("name", ""), "qty": int(s.get("quantity") or 1)}
+                             for s in (p.get("comboItemList") or [])],
+                })
+            out.append({
+                "orderId": str(o.get("orderId", "")),
+                "store": o.get("storeName", ""),
+                "storeCode": str(o.get("storeCode", "")),
+                "time": o.get("createTime", ""),
+                "status": o.get("orderStatus", ""),
+                "type": "外送" if str(o.get("orderType")) == "2" else "到店",
+                "amount": _money(o.get("realTotalAmount")),
+                "count": sum(i["qty"] for i in items),
+                "items": items,
+            })
+        res = {"orders": out, "total": len(out), "cached": False}
+        Bridge.orders_cache = {"ts": now, "data": res}
+        return res
+
+    def order_detail(self, order_id):
+        """单个订单详情 (MCP query-order): 官方商品图/优惠明细/取餐码/配送费。"""
+        order_id = (order_id or "").strip()
+        if not order_id:
+            return {"error": "缺少 orderId"}
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        try:
+            d = mcd.call("query-order", {"orderId": order_id}) or {}
+        except Exception as e:
+            return {"error": _short_err(e)}
+        if not isinstance(d, dict) or not d:
+            return {"error": "未查到该订单"}
+        items = []
+        for p in d.get("orderProductList") or []:
+            items.append({
+                "name": p.get("productName", ""),
+                "code": str(p.get("productCode", "")),
+                "img": p.get("productImage", ""),
+                "qty": int(p.get("quantity") or 1),
+                "price": _money(p.get("price")),
+                "subs": [{"name": s.get("itemName", ""), "qty": int(s.get("itemQuantity") or 1)}
+                         for s in (p.get("comboItemList") or [])],
+            })
+        return {
+            "orderId": d.get("orderId", order_id),
+            "status": d.get("orderStatus", ""),
+            "store": d.get("storeName", ""),
+            "address": d.get("storeAddress", ""),
+            "time": d.get("createTime", ""),
+            "takeWay": d.get("takeWay", ""),
+            "pickupCode": d.get("pickupCode", ""),
+            "productPrice": _money(d.get("productPrice")),
+            "deliveryPrice": _money(d.get("realDeliveryPrice") or d.get("deliveryPrice")),
+            "packingFee": _money(d.get("realPackingFeeTotalPrice")),
+            "discount": _money(d.get("totalDiscountAmount")),
+            "payable": _money(d.get("realTotalAmount")),
+            "coupons": [{"name": c.get("couponName", ""), "amount": _money(c.get("discountAmount"))}
+                        for c in (d.get("couponList") or [])],
+            "items": items,
+        }
+
+    def match_exact(self, name):
+        """当前门店菜单里是否存在同名餐品(归一化后完全相等)。"""
+        q = _norm_name(name)
+        if not q:
+            return None
+        for c in self.catalog:
+            if _norm_name(c.get("name", "")) == q:
+                return c
+        return None
+
+    def match_by_name(self, name):
+        """
+        按餐品名在当前门店菜单里找最接近的一款。
+        历史订单可能来自别的门店/别的时期(如「麦咖啡™热奶铁中杯」),
+        所以先精确、再去品牌与杯型温度后包含匹配, 取重合字数最多的一款。
+        """
+        q = _norm_name(name)
+        if not q:
+            return None
+        hit = self.match_exact(name)
+        if hit:
+            return hit
+        qc = _core_name(q)
+        best, best_score = None, 0
+        for c in self.catalog:
+            n = _norm_name(c.get("name", ""))
+            nc = _core_name(n)
+            score = 0
+            if qc and nc and (qc in nc or nc in qc):
+                score = min(len(qc), len(nc)) + 1     # 核心词命中优先
+            elif q and n and (q in n or n in q):
+                score = min(len(q), len(n))
+            if score > best_score:
+                best_score, best = score, c
+        return best if best_score >= 2 else None      # 至少重合 2 个字才认
+
+    def reorder(self, order_id):
+        """历史订单一键再来: 同名餐品直接加, 没有就拆成套餐子项逐个匹配。"""
+        det = self.order_detail(order_id)
+        if det.get("error"):
+            return det
+        if not self.catalog:
+            return {"error": "当前门店菜单还没加载完"}
+        added, missing = [], []
+        for p in det["items"]:
+            qty = int(p.get("qty") or 1)
+            picks = []
+            whole = self.match_exact(p["name"])
+            if whole:
+                picks = [whole]                       # 门店有同名餐品/同名套餐
+            elif p.get("subs"):                       # 没有同名套餐 -> 拆子项
+                for s in p["subs"]:
+                    h = self.match_by_name(s["name"])
+                    if h and h["code"] not in [x["code"] for x in picks]:
+                        picks.append(h)
+            else:
+                h = self.match_by_name(p["name"])     # 单品: 模糊匹配
+                if h:
+                    picks = [h]
+            if not picks:
+                missing.append(p["name"])
+                continue
+            for h in picks:
+                self.add(h["code"], qty)
+                added.append(h["name"])
+            if len(picks) > 1:
+                self.push_log(f"「{p['name']}」当前门店无同名套餐, 已拆为单品加入")
+        self.push_log(f"再来一单: 加入 {len(added)} 样"
+                      + (f", {len(missing)} 样当前门店没有" if missing else ""))
+        return {"added": added, "missing": missing,
+                "store": det.get("store", ""), "orderId": det.get("orderId", "")}
+
     def dial(self, delta):
         with self.lock:
             if not self.catalog:
@@ -781,6 +940,38 @@ class Bridge:
         }
 
 
+def _money(v):
+    """MCP 金额字段有时是字符串('65.8')有时是数字, 统一成 float 元。"""
+    if v is None or v == "":
+        return 0.0
+    try:
+        return round(float(v), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _short_err(e):
+    return f"{type(e).__name__}: {e}"[:200]
+
+
+def _norm_name(s):
+    """餐品名归一化: 去商标/空格/括号, 便于跨门店匹配同名餐品。"""
+    s = (s or "").replace("™", "").replace("®", "").replace(" ", "")
+    s = re.sub(r"[（(][^）)]*[）)]", "", s)
+    return s.strip()
+
+
+# 品牌前缀与杯型/温度后缀: 不同门店、不同时期叫法不一样, 匹配时先剥掉
+_CORE_STRIP = ("麦咖啡", "中杯", "大杯", "小杯", "热", "冰", "冷")
+
+
+def _core_name(s):
+    c = s or ""
+    for w in _CORE_STRIP:
+        c = c.replace(w, "")
+    return c
+
+
 def _fmt_next(enjoyable):
     if not isinstance(enjoyable, dict):
         return None
@@ -880,6 +1071,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"catalog": BRIDGE.catalog, "coupons": BRIDGE.coupons})
             return
 
+        # 麦当劳账号真实历史订单 (MCP order-list)
+        if path == "/api/orders":
+            force = "force" in (self.path.split("?")[1] if "?" in self.path else "")
+            self._json(BRIDGE.orders(force=force))
+            return
+
+        # 单个订单详情 (MCP query-order)
+        if path == "/api/order":
+            q = urllib.parse.parse_qs(self.path.split("?")[1] if "?" in self.path else "")
+            self._json(BRIDGE.order_detail((q.get("orderId") or [""])[0]))
+            return
+
         if path == "/api/events":
             self._sse()
             return
@@ -969,6 +1172,11 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/clear":
             BRIDGE.clear()
             self._json({"ok": True})
+            return
+
+        if path == "/api/reorder":
+            # 历史订单一键再来: 按餐品名匹配当前门店菜单后放回餐盘
+            self._json(BRIDGE.reorder(b.get("orderId", "")))
             return
 
         if path == "/api/select":
