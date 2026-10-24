@@ -700,9 +700,36 @@ class Bridge:
                 "tags": tags,
                 "enable": c.get("enable", 0),
             })
-        res = {"coupons": out, "total": len(out), "cached": False}
+        claimable = []
+        try:
+            for c in mcd.fetch_available_coupons():
+                if str(c.get("couponStatus", "")).upper() == "CAN_GET":
+                    claimable.append({"name": c.get("couponName", ""),
+                                      "image": c.get("couponImage", ""),
+                                      "label": c.get("label", "可领取")})
+        except Exception:
+            pass
+        res = {"coupons": out, "total": len(out), "claimable": claimable, "cached": False}
         Bridge.coupons_cache = {"ts": now, "data": res}
         return res
+
+    def bind_coupons(self):
+        """一键领取当前账号可领取的麦麦省优惠券。"""
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        try:
+            d = mcd.call("auto-bind-coupons", {}) or {}
+            self.coupons_cache = {"ts": 0.0, "data": None}
+            ok = d.get("successCoupons") or []
+            failed = d.get("failedCoupons") or []
+            self.push_log(f"优惠券领取: 成功 {len(ok)} 张, 失败 {len(failed)} 张")
+            return {"success": [{"name": x.get("couponName", ""), "image": x.get("couponImage", "")}
+                                for x in ok],
+                    "failed": [{"name": x.get("couponName", ""), "reason": x.get("reason", "")}
+                               for x in failed],
+                    "successCount": len(ok), "failedCount": len(failed)}
+        except Exception as e:
+            return {"error": _short_err(e)}
 
     def orders(self, force=False):
         """
@@ -1232,6 +1259,10 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reorder":
             # 历史订单一键再来: 按餐品名匹配当前门店菜单后放回餐盘
             self._json(BRIDGE.reorder(b.get("orderId", "")))
+            return
+
+        if path == "/api/coupons/bind":
+            self._json(BRIDGE.bind_coupons())
             return
 
         if path == "/api/select":

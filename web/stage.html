@@ -377,6 +377,14 @@ body{
 .cpc .use{flex:none;font-size:9px;font-weight:800;border-radius:999px;padding:2px 9px;white-space:nowrap}
 .use.yes{background:rgba(255,199,44,.16);color:var(--gold)}
 .use.no{background:rgba(255,255,255,.07);color:var(--dim2)}
+.cpclaim{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  border:1px dashed rgba(255,199,44,.38);border-radius:12px;padding:10px 11px;
+  background:rgba(255,199,44,.06);margin-bottom:10px}
+.cpclaim .ct{font-size:11px;color:var(--ink);line-height:1.5}
+.cpclaim .ct b{color:var(--gold)}
+.cpclaim button{flex:none;border:0;border-radius:999px;padding:7px 12px;cursor:pointer;
+  background:var(--gold);color:#3A2600;font:800 10.5px inherit}
+.cpclaim button:disabled{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -1057,14 +1065,14 @@ async function loadCoupons(force){
     }
     COUPONS=d.coupons||[];
     $('cpCount').textContent='共 '+COUPONS.length+' 张'+(d.cached?' · 缓存':' · 实时');
-    renderCoupons();
+    renderCoupons(d.claimable||[]);
   }catch(e){
     box.innerHTML='<div class="odempty">拉取失败：'+esc(String(e))+'</div>';
   }
 }
 $('cpRefresh').onclick=()=>loadCoupons(true);
 
-function renderCoupons(){
+function renderCoupons(claimable=[]){
   const box=$('cpList');
   // 顶栏角标: 可用券数
   if(COUPONS&&COUPONS.length){
@@ -1072,11 +1080,17 @@ function renderCoupons(){
     $('couponBadge').style.display=av?'block':'none';
     $('couponBadge').textContent=av;
   }
+  let claimHtml='';
+  if(claimable.length){
+    claimHtml='<div class="cpclaim"><div class="ct">发现 <b>'+claimable.length+' 张</b> 可领取优惠券<br><span style="color:var(--dim)">'+
+      claimable.map(c=>esc(c.name)).join('、')+'</span></div><button id="cpBind">一键领取</button></div>';
+  }
   if(!COUPONS||!COUPONS.length){
-    box.innerHTML='<div class="odempty">卡包里还没有优惠券。</div>';
+    box.innerHTML=claimHtml+'<div class="odempty">卡包里还没有已领取优惠券。</div>';
+    bindClaimButton();
     return;
   }
-  box.innerHTML=COUPONS.map(c=>{
+  box.innerHTML=claimHtml+COUPONS.map(c=>{
     const usable=c.available;
     const img=c.image
       ?`<img src="${esc(c.image)}" alt="${esc(c.title)}" loading="lazy" onerror="this.outerHTML='<div class=&quot;ph&quot;>券</div>'">`
@@ -1094,6 +1108,19 @@ function renderCoupons(){
       '<div class="use '+(usable?'yes':'no')+'">'+(usable?'可用':'未到使用时间')+'</div>'+
     '</div>';
   }).join('');
+  bindClaimButton();
+}
+function bindClaimButton(){
+  const b=$('cpBind');
+  if(!b) return;
+  b.onclick=async()=>{
+    b.disabled=true; b.textContent='领取中…';
+    const r=await post('/api/coupons/bind',{});
+    if(r.error){ b.disabled=false; b.textContent='重试领取'; say('优惠券领取失败：'+r.error); return; }
+    const ok=(r.success||[]).length, fail=(r.failed||[]).length;
+    say('优惠券领取完成：成功 '+ok+' 张'+(fail?'，失败 '+fail+' 张':'')+'。正在刷新卡包…');
+    await loadCoupons(true);
+  };
 }
 
 /* ---------------- 语音 PTT ---------------- */
