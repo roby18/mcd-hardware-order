@@ -293,7 +293,7 @@ function renderEvidence(){
         ${p.passage?`<div class="pp">${esc(p.passage.slice(0,180))}${p.passage.length>180?'…':''}</div>`:''}
         ${pics?`<div class="pics">${pics}</div>`:''}
         <div class="pm">${p.site?`<span>来源 ${esc(p.site)}</span>`:''}${p.date?`<span>${esc(p.date)}</span>`:''}
-        ${typeof p.score==='number'?`<span class="sc">相关度 ${(p.score*100).toFixed(0)}%</span>`:''}</div></div>`;
+        ${typeof p.score==='number'?`<span class="sc">${p.score<=1?'相关度 '+Math.round(p.score*100)+'%':'高相关'}</span>`:''}</div></div>`;
     }).join('');
     return `<div class="round"><div class="rh"><span class="rt">第 ${r.round} 轮</span>
       <span class="sbadge ${bc}">${esc(r.badge||'全网')}</span>

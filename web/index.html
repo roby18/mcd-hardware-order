@@ -367,6 +367,22 @@ header .sp{flex:1}
 .btn.gold{background:linear-gradient(180deg,#FFD95E,var(--gold));border-color:var(--gold-d);color:#5A3B00;box-shadow:0 4px 12px rgba(255,199,44,.3)}
 .btn.gold:hover{filter:brightness(1.04)}
 
+/* ---------- 官方膳食佐证(元宝 Industry=gov) ---------- */
+.nutri{margin-top:12px;display:none}
+.nutri.on{display:block;animation:pop .3s var(--jelly)}
+.nutri .nh{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--ink);margin-bottom:9px}
+.nutri .nh .tag{font-size:10px;font-weight:700;color:#8A5A00;background:var(--gold-s);border:1px solid var(--gold);border-radius:999px;padding:2px 8px;flex:none}
+.nutri .nh .q{margin-left:auto;font-size:11px;color:var(--dim);font-weight:600;max-width:58%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ncard{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;background:#FCFCFD}
+.ncard .nt{font-size:13px;font-weight:600;line-height:1.4}
+.ncard .nt a{color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--dim)}
+.ncard .nt a:hover{color:var(--red);border-bottom-color:var(--red)}
+.ncard .np{font-size:12px;color:#5C534D;line-height:1.6;margin-top:3px}
+.ncard .nm2{font-size:11px;color:var(--dim);margin-top:4px;display:flex;gap:10px;flex-wrap:wrap}
+.ncard .nm2 .sc{color:var(--ok);font-weight:700}
+.nload,.nempty{font-size:12px;color:var(--dim);padding:8px 2px;line-height:1.6}
+.nempty b{color:var(--red)}
+
 /* ---------- AI 配单 ---------- */
 .ctrls{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
 .fld .lb{font-size:11px;color:var(--dim);font-weight:600;margin-bottom:5px}
@@ -481,6 +497,10 @@ footer{margin-top:16px;color:var(--dim);font-size:11px;text-align:center;padding
         <button class="btn" onclick="clearCart()">清空餐盘</button>
         <button class="btn gold" onclick="confirmOrder()">确认这一单</button>
       </div>
+      <div class="btnrow" style="margin-top:8px">
+        <button class="btn" id="nutriBtn" onclick="loadNutrition()">官方膳食佐证</button>
+      </div>
+      <div class="nutri" id="nutriPanel"></div>
     </div>
 
     <div class="card">
@@ -1108,6 +1128,44 @@ function render(s){
 
 async function refresh(){
   try{ const r=await fetch('/api/state'); render(await r.json()); }catch(e){}
+}
+
+/* 官方膳食佐证: 按当前购物车餐品, 用元宝 Industry=gov 查官方信源的营养/膳食参考 */
+async function loadNutrition(){
+  const panel=$('nutriPanel'), btn=$('nutriBtn');
+  const cart=(S&&S.cart)||[];
+  if(!cart.length){
+    panel.classList.add('on');
+    panel.innerHTML='<div class="nempty">餐盘还是空的，先加几样餐品，再来查<b>官方膳食参考</b>。</div>';
+    return;
+  }
+  const names=[...new Set(cart.map(i=>i.name))].slice(0,4).join(' ');
+  const kw=names+' 热量 营养 膳食 建议';
+  const old=btn.textContent;
+  btn.disabled=true; btn.textContent='求证中…';
+  panel.classList.add('on');
+  panel.innerHTML='<div class="nload">正在向元宝搜索<b>官方信源</b>求证「'+esc(names)+'」的营养/膳食建议…</div>';
+  const d=await post('/api/yb',{keywords:kw, round:1, industry:'gov', cnt:10});
+  btn.disabled=false; btn.textContent=old;
+  if(d.error||!d.count){
+    panel.innerHTML='<div class="nempty">官方信源暂时没查到可靠结果'+(d.error?('（'+esc(d.error)+'）'):'')+'，已如实告知，不编造。</div>';
+    return;
+  }
+  let html='<div class="nh">官方膳食佐证 <span class="tag">元宝 · Industry=gov</span>'
+    +'<span class="q" title="'+esc(kw)+'">'+esc(kw)+'</span></div>';
+  html+=(d.pages||[]).slice(0,5).map(p=>{
+    const ok=/^https?:\/\//.test(p.url);
+    return '<div class="ncard"><div class="nt">'
+      +(ok?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title||p.url)}</a>`:esc(p.title||'(无标题)'))
+      +'</div>'
+      +(p.passage?`<div class="np">${esc(p.passage.slice(0,160))}${p.passage.length>160?'…':''}</div>`:'')
+      +'<div class="nm2">'+(p.site?`<span>来源 ${esc(p.site)}</span>`:'')
+      +(p.date?`<span>${esc(p.date)}</span>`:'')
+      +(typeof p.score==='number'?`<span class="sc">${p.score<=1?'相关度 '+Math.round(p.score*100)+'%':'高相关'}</span>`:'')
+      +'</div></div>';
+  }).join('');
+  html+='<div class="nempty" style="margin-top:2px">以上来自元宝搜索官方信源(Industry=gov)，仅供搭配参考，具体以包装营养标签与官方渠道为准。</div>';
+  panel.innerHTML=html;
 }
 
 /* ---------------- 启动 ---------------- */
