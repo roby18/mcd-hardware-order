@@ -655,6 +655,55 @@ class Bridge:
     # ------------------------------------------------ 真实历史订单 (MCP)
     orders_cache = {"ts": 0.0, "data": None}
 
+    # ------------------------------------------------ 卡包优惠券 (MCP)
+    coupons_cache = {"ts": 0.0, "data": None}
+
+    def my_coupons(self, force=False):
+        """
+        麦当劳账号卡包里的真实优惠券 (MCP query-my-coupons)。
+        返回可用/已用完两种状态 + 官方券图 + 有效期 + 使用标签。
+        """
+        now = time.time()
+        cached = self.coupons_cache["data"]
+        if (not force) and cached is not None and now - self.coupons_cache["ts"] < 60:
+            return dict(cached, cached=True)
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        try:
+            data = mcd.call("query-my-coupons", {"page": "1", "pageSize": "50"}) or {}
+        except Exception as e:
+            return {"error": _short_err(e)}
+        out = []
+        for c in data.get("coupons") or []:
+            di = c.get("discountInfo") or {}
+            instr = c.get("instructions") or {}
+            avail = []
+            for a in instr.get("availableTime") or []:
+                avail.append(a.get("text", ""))
+            tags = [t.get("label", "") for t in (c.get("tags") or [])]
+            # 是否"现在就能用": 今日可用次数>0 且 券处于启用态。
+            # totalAvailableCount>0 只说明券还没用完(可能未到使用时间), 不能算"现在可用"。
+            available = (int(c.get("currentDayAvailableCount") or 0) > 0
+                         and int(c.get("enable") or 0) == 1)
+            out.append({
+                "id": c.get("id", ""),
+                "title": c.get("title", ""),
+                "subtitle": c.get("subtitle", ""),
+                "image": c.get("image", "") or c.get("bigImage", ""),
+                "value": di.get("discountValue", ""),
+                "desc": di.get("discountDesc", ""),
+                "available": available,
+                "totalCount": c.get("totalCount", 0),
+                "availText": " ".join(avail),
+                "tradeStart": c.get("tradeStartDate", ""),
+                "tradeEnd": c.get("tradeEndDate", ""),
+                "tags": tags,
+                "enable": c.get("enable", 0),
+            })
+        res = {"coupons": out, "total": len(out), "cached": False}
+        Bridge.coupons_cache = {"ts": now, "data": res}
+        return res
+
     def orders(self, force=False):
         """
         麦当劳账号的真实历史订单 (MCP order-list, 非商城订单)。
@@ -1075,6 +1124,12 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/orders":
             force = "force" in (self.path.split("?")[1] if "?" in self.path else "")
             self._json(BRIDGE.orders(force=force))
+            return
+
+        # 卡包真实优惠券 (MCP query-my-coupons)
+        if path == "/api/coupons":
+            force = "force" in (self.path.split("?")[1] if "?" in self.path else "")
+            self._json(BRIDGE.my_coupons(force=force))
             return
 
         # 单个订单详情 (MCP query-order)

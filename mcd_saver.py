@@ -76,8 +76,22 @@ def call(tool: str, arguments: dict) -> dict:
     if "error" in raw:
         raise McpError(f"MCP error: {raw['error']}")
 
+    result = raw.get("result", {}) or {}
+
+    # 优先取 structuredContent(多数工具会带, 是干净的 JSON, 如优惠券/订单),
+    # 没有再退回 text 里的混合说明 + 原始 JSON 解析。
+    sc = result.get("structuredContent")
+    if isinstance(sc, dict):
+        if sc.get("success") is False:
+            raise McpError(sc.get("message", "接口返回失败"))
+        if "data" in sc:
+            return sc.get("data") or {}
+        return sc
+    if isinstance(sc, list):
+        return sc
+
     text = "".join(
-        c.get("text", "") for c in raw.get("result", {}).get("content", [])
+        c.get("text", "") for c in result.get("content", [])
         if isinstance(c, dict)
     )
     return extract_data(text)
