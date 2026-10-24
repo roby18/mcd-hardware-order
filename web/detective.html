@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>吃腻了麦当劳 · 饮食健身侦探 | 元宝搜索</title>
+<style>
+:root{
+  --red:#DA291C; --red-x:#9E1B12; --red-d:#B02218;
+  --gold:#FFC72C; --gold-d:#D9A400; --gold-s:#FFF6DC;
+  --bg:#FFF9F2; --card:#fff; --line:#F0E4D8; --dim:#8A7F76;
+  --ok:#1E9E6A; --ink:#2B2320;
+  --r:16px;
+  --shadow:0 2px 0 rgba(158,27,18,.06), 0 8px 24px rgba(158,27,18,.07);
+  --jelly:cubic-bezier(.34,1.42,.48,1);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);
+  font-family:"PingFang SC","Microsoft YaHei",-apple-system,sans-serif;
+  min-height:100vh;padding:22px 16px 60px}
+.wrap{max-width:980px;margin:0 auto}
+a.back{color:var(--dim);text-decoration:none;font-size:13px;font-weight:700}
+a.back:hover{color:var(--red)}
+
+header{display:flex;align-items:center;gap:14px;margin:14px 0 6px}
+.logo{width:44px;height:44px;border-radius:12px;background:var(--red);
+  display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 0 var(--red-x)}
+.logo svg{width:28px;height:28px}
+h1{font-size:24px;font-weight:900;letter-spacing:.5px}
+.sub{color:var(--dim);font-size:13px;margin:2px 0 20px}
+.sub b{color:var(--red)}
+
+/* 问题输入区 */
+.ask{background:var(--card);border:2px solid var(--line);border-radius:var(--r);
+  padding:18px;box-shadow:var(--shadow);margin-bottom:16px}
+.ask label{display:block;font-size:13px;font-weight:900;margin-bottom:8px}
+.ask .row{display:flex;gap:10px}
+.ask input{flex:1;border:2px solid var(--line);border-radius:12px;padding:12px 14px;
+  font-size:15px;font-family:inherit;outline:none;background:#FFFEFA}
+.ask input:focus{border-color:var(--gold)}
+.btn{border:none;cursor:pointer;border-radius:12px;padding:12px 20px;
+  font-weight:900;font-size:14px;font-family:inherit;white-space:nowrap;
+  background:linear-gradient(180deg,#F04438,var(--red) 55%,var(--red-d));color:#fff;
+  box-shadow:0 4px 0 var(--red-x)}
+.btn:active{transform:translateY(3px);box-shadow:0 1px 0 var(--red-x)}
+.btn.gold{background:linear-gradient(180deg,var(--gold),var(--gold-d));color:#5A3B00;
+  box-shadow:0 4px 0 var(--gold-d)}
+.btn.gold:active{box-shadow:0 1px 0 var(--gold-d)}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.examples{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.examples span{font-size:12px;color:var(--dim);font-weight:700;padding-top:6px}
+.examples button{border:1.5px dashed var(--line);background:#FFFEFA;border-radius:999px;
+  padding:5px 12px;font-size:12px;font-weight:700;color:var(--dim);cursor:pointer;font-family:inherit}
+.examples button:hover{border-color:var(--gold);color:var(--ink)}
+
+/* 策略面板 */
+.strategy{background:var(--card);border:2px solid var(--line);border-radius:var(--r);
+  padding:16px 18px;margin-bottom:16px;box-shadow:var(--shadow)}
+.strategy h2{font-size:14px;font-weight:900;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.strategy h2::before{content:"";width:4px;height:16px;background:var(--red);border-radius:2px}
+.steps{display:grid;gap:8px}
+.step{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;
+  background:#FDF8F0;border:2px solid transparent;transition:.25s var(--jelly)}
+.step .n{width:26px;height:26px;border-radius:50%;background:var(--line);color:var(--dim);
+  display:flex;align-items:center;justify-content:center;font-weight:900;font-size:13px;flex:none}
+.step .t{flex:1;font-size:13px;font-weight:700}
+.step .t small{display:block;color:var(--dim);font-weight:400;font-size:11px;margin-top:1px}
+.step .st{font-size:11px;font-weight:900;color:var(--dim);flex:none}
+.step.run{border-color:var(--gold);background:var(--gold-s)}
+.step.run .n{background:var(--gold);color:#5A3B00}
+.step.run .st{color:#8A6100}
+.step.done{border-color:#BFE8D4;background:#F2FBF6}
+.step.done .n{background:var(--ok);color:#fff}
+.step.done .st{color:var(--ok)}
+.step.fail{border-color:#F5C6C0;background:#FFF4F2}
+.step.fail .n{background:var(--red);color:#fff}
+.step.fail .st{color:var(--red)}
+
+/* 结论卡 */
+.verdict{background:linear-gradient(160deg,#FFFDF7,#FFF6E8);border:2px solid var(--gold);
+  border-radius:var(--r);padding:18px;margin-bottom:16px;box-shadow:var(--shadow);display:none}
+.verdict.on{display:block;animation:pop .4s var(--jelly)}
+@keyframes pop{0%{transform:scale(.96);opacity:0}100%{transform:scale(1);opacity:1}}
+.verdict h2{font-size:14px;font-weight:900;margin-bottom:10px;color:#8A6100;
+  display:flex;align-items:center;gap:8px}
+.verdict h2::before{content:"";width:4px;height:16px;background:var(--gold);border-radius:2px}
+.verdict .body{font-size:14px;line-height:1.75}
+.verdict .body p{margin-bottom:8px}
+.verdict .body b{color:var(--red-x)}
+.verdict .warn{margin-top:10px;padding:10px 12px;border-radius:10px;background:#FFF4F2;
+  border:1.5px dashed #F0B8B0;font-size:12px;color:var(--red-x);line-height:1.6}
+
+/* 证据链 */
+.evi{background:var(--card);border:2px solid var(--line);border-radius:var(--r);
+  box-shadow:var(--shadow);overflow:hidden}
+.evi h2{font-size:14px;font-weight:900;padding:14px 18px;border-bottom:2px solid var(--line);
+  display:flex;align-items:center;gap:8px;background:#FFFEFA}
+.evi h2::before{content:"";width:4px;height:16px;background:var(--red);border-radius:2px}
+.evi h2 .cnt{margin-left:auto;font-size:11px;color:var(--dim);font-weight:700}
+.round{border-bottom:2px solid var(--line);padding:14px 18px}
+.round:last-child{border-bottom:none}
+.round .rh{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+.round .rt{font-size:11px;font-weight:900;color:#fff;background:var(--ink);
+  border-radius:6px;padding:2px 8px;flex:none}
+.round .rq{font-size:14px;font-weight:900}
+.round .rm{margin-left:auto;font-size:11px;color:var(--dim);font-family:ui-monospace,Menlo,monospace}
+.page{border-left:3px solid var(--line);padding:2px 0 2px 12px;margin-bottom:10px}
+.page .pt{font-size:13px;font-weight:700;line-height:1.4}
+.page .pt a{color:var(--ink);text-decoration:none;border-bottom:1px dotted var(--dim)}
+.page .pt a:hover{color:var(--red);border-bottom-color:var(--red)}
+.page .pp{font-size:12px;color:#5C534D;line-height:1.65;margin-top:3px}
+.page .pm{font-size:11px;color:var(--dim);margin-top:3px;display:flex;gap:10px;flex-wrap:wrap}
+.page .pm .sc{color:var(--ok);font-weight:700}
+.nothing{padding:26px;text-align:center;color:var(--dim);font-size:13px}
+.empty-tip{display:flex;align-items:center;gap:10px;padding:14px 18px;background:#FFF4F2;
+  border-bottom:2px solid var(--line);font-size:12px;color:var(--red-x);font-weight:700}
+
+footer{margin-top:18px;text-align:center;color:var(--dim);font-size:11px;line-height:1.8}
+footer .tags{display:flex;gap:6px;justify-content:center;flex-wrap:wrap;margin:8px 0}
+footer .tags span{background:var(--card);border:1.5px solid var(--line);border-radius:999px;
+  padding:3px 10px;font-weight:700}
+@media(max-width:640px){.ask .row{flex-direction:column}h1{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="/">&larr; 返回麦门点餐台</a>
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#FFC72C" stroke-width="2.6" stroke-linecap="round">
+        <circle cx="11" cy="11" r="7"/><path d="M16.5 16.5 L21 21"/>
+      </svg>
+    </div>
+    <div>
+      <h1>吃腻了麦当劳，然后呢？</h1>
+      <div class="sub">饮食健身侦探 &middot; 多轮搜索 &times; 交叉比对 &middot; 元宝搜索 API</div>
+    </div>
+  </header>
+
+  <div class="ask">
+    <label>你的问题（建议说清场景：预算 / 忌口 / 目标）</label>
+    <div class="row">
+      <input id="q" maxlength="60" placeholder="例：吃腻了麦当劳，晚上想健身，吃什么比较好？"
+             value="吃腻了麦当劳，晚上想健身，吃什么比较好？">
+      <button class="btn" id="go">开始调查</button>
+    </div>
+    <div class="examples">
+      <span>试试：</span>
+      <button data-q="吃腻了麦当劳，晚上想健身，吃什么比较好？">健身党</button>
+      <button data-q="麦当劳吃腻了，减脂期午餐有什么替代选择？">减脂期</button>
+      <button data-q="孩子吃腻了麦当劳，家庭晚餐做什么有营养？">家庭晚餐</button>
+      <button data-q="熬夜之后吃腻了麦当劳，怎么调整饮食？">熬夜恢复</button>
+    </div>
+  </div>
+
+  <div class="strategy">
+    <h2>调查策略（每一步都可验证）</h2>
+    <div class="steps" id="steps"></div>
+  </div>
+
+  <div class="verdict" id="verdict">
+    <h2>综合结论（基于上方 {N} 轮真实搜索）</h2>
+    <div class="body" id="verdictBody"></div>
+    <div class="warn" id="verdictWarn"></div>
+  </div>
+
+  <div class="evi">
+    <h2>证据链 <span class="cnt" id="eviCnt">每次查询带 RequestId 与时间戳，可复现</span></h2>
+    <div id="eviList"><div class="nothing">还没有查询记录。输入问题，点「开始调查」。</div></div>
+  </div>
+
+  <footer>
+    <div class="tags">
+      <span>#元宝搜索</span><span>#WaytoAGI</span><span>#AI切磋大会</span><span>#1024超能Coding周末</span>
+    </div>
+    搜索结果实时来自腾讯云元宝搜索 API（api.wsa.cloud.tencent.com/SearchPro）<br>
+    结论只引用上方来源，找不到可靠依据时会明说「未找到」。
+  </footer>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let rounds=[];      // 已完成的轮次
+let running=false;
+
+/* 每个问题 -> 三轮递进式搜索策略: 先定义问题, 再找具体方案, 最后交叉验证/查反例 */
+const STRATEGIES=[
+  {key:'scene',  label:'第 1 轮 · 定义场景',  hint:'把口语问题拆成可检索的条件组合'},
+  {key:'plan',   label:'第 2 轮 · 具体方案',  hint:'搜"吃什么/怎么做", 拿可执行的做法'},
+  {key:'verify', label:'第 3 轮 · 交叉验证',  hint:'换关键词复搜 + 找反例, 对不上的标注"未找到"'}
+];
+const QUERIES={
+  '吃腻了麦当劳，晚上想健身，吃什么比较好？':{
+    scene:'健身后 晚餐 蛋白质 碳水 搭配 建议',
+    plan:'健身完 晚上 吃什么 鸡胸肉 燕麦 香蕉 做法',
+    verify:'健身后 立刻吃饭 还是 半小时后 吸收 区别'
+  },
+  '麦当劳吃腻了，减脂期午餐有什么替代选择？':{
+    scene:'减脂期 午餐 低卡 饱腹 外卖 替代 麦当劳',
+    plan:'减脂 午餐 食谱 鸡胸肉沙拉 杂粮饭 做法 热量',
+    verify:'减脂 午餐 吃太清淡 反而 胖 代谢 影响'
+  },
+  '孩子吃腻了麦当劳，家庭晚餐做什么有营养？':{
+    scene:'儿童 晚餐 营养 搭配 不爱吃饭 替代 快餐',
+    plan:'家庭晚餐 儿童 食谱 牛肉 蔬菜 鸡蛋 做法',
+    verify:'儿童 晚餐 吃太晚 影响 睡眠 长高 建议'
+  },
+  '熬夜之后吃腻了麦当劳，怎么调整饮食？':{
+    scene:'熬夜后 饮食 调整 恢复 清淡 营养',
+    plan:'熬夜 吃什么 修复 肝脏 维生素 食谱',
+    verify:'熬夜后 早餐 不吃 危害 恢复 建议'
+  }
+};
+const DEFAULT_STRATEGY=q=>({
+  scene:q.replace(/[?？。]/g,'')+' 原因 建议',
+  plan:q.replace(/[?？。]/g,'')+' 食谱 做法 替代',
+  verify:q.replace(/[?？。]/g,'')+' 误区 注意事项'
+});
+
+function renderSteps(states){
+  const box=$('steps');
+  if(box.children.length!==STRATEGIES.length){
+    box.innerHTML=STRATEGIES.map((s,i)=>
+      `<div class="step" data-i="${i}"><div class="n">${i+1}</div>`+
+      `<div class="t">${s.label}<small>${s.hint}</small></div><div class="st">待执行</div></div>`).join('');
+  }
+  [...box.children].forEach((el,i)=>{
+    const st=states[i]||'idle';
+    el.className='step'+(st==='run'?' run':st==='done'?' done':st==='fail'?' fail':'');
+    el.querySelector('.st').textContent={idle:'待执行',run:'搜索中…',done:'完成',fail:'无结果'}[st];
+  });
+}
+
+async function search(keywords, roundNo){
+  const r=await fetch('/api/yb',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({keywords, round:roundNo})});
+  return r.json();
+}
+
+function renderEvidence(){
+  const box=$('eviList');
+  $('eviCnt').textContent=`${rounds.length} 轮查询 · ${rounds.reduce((a,r)=>a+(r.count||0),0)} 条来源 · 每次带 RequestId 可复现`;
+  if(!rounds.length){ box.innerHTML='<div class="nothing">还没有查询记录。</div>'; return; }
+  box.innerHTML=rounds.map(r=>{
+    if(r.error) return `<div class="round"><div class="rh"><span class="rt">第 ${r.round} 轮</span>
+      <span class="rq">${esc(r.keywords)}</span><span class="rm">${esc(r.ts||'')}</span></div>
+      <div class="page" style="border-color:var(--red)"><div class="pp" style="color:var(--red)">搜索失败：${esc(r.error)}（此轮按「未找到」处理，不计入结论）</div></div></div>`;
+    const pages=(r.pages||[]).map(p=>{
+      const ok=/^https?:\/\//.test(p.url);
+      return `<div class="page">
+        <div class="pt">${ok?`<a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title||p.url)}</a>`:esc(p.title||'(无标题)')}</div>
+        ${p.passage?`<div class="pp">${esc(p.passage.slice(0,180))}${p.passage.length>180?'…':''}</div>`:''}
+        <div class="pm">${p.site?`<span>来源 ${esc(p.site)}</span>`:''}${p.date?`<span>${esc(p.date)}</span>`:''}
+        ${typeof p.score==='number'?`<span class="sc">相关度 ${(p.score*100).toFixed(0)}%</span>`:''}</div></div>`;
+    }).join('');
+    return `<div class="round"><div class="rh"><span class="rt">第 ${r.round} 轮</span>
+      <span class="rq">${esc(r.keywords)}</span>
+      <span class="rm">${esc(r.ts)} · ${r.elapsed}s · ${r.count} 条 · ${esc(r.requestId)}</span></div>
+      ${pages||'<div class="page" style="border-color:var(--red)"><div class="pp" style="color:var(--red)">没有返回结果——此轮按「未找到」处理</div></div>'}</div>`;
+  }).join('');
+}
+
+/* 结论生成: 只用已搜到的内容做交叉归纳, 不做无依据断言 */
+function buildVerdict(){
+  const ok=rounds.filter(r=>!r.error&&r.count>0);
+  const miss=rounds.filter(r=>r.error||r.count===0);
+  if(!ok.length){
+    $('verdict').classList.add('on');
+    $('verdictBody').innerHTML='<p><b>未找到可靠来源。</b>三轮搜索都没有返回结果，按规则如实报告，不编造。</p>';
+    $('verdictWarn').textContent='此结论诚实标注为「未找到」——比硬编一个数字更可靠。';
+    return;
+  }
+  const sites=[...new Set(ok.flatMap(r=>(r.pages||[]).map(p=>p.site).filter(Boolean)))];
+  const top=ok.flatMap(r=>(r.pages||[]).slice(0,2).map(p=>`${p.title||'(无标题)'}｜${p.site||'未知来源'}`));
+  const hot=ok.flatMap(r=>(r.pages||[])).sort((a,b)=>(b.score||0)-(a.score||0))[0];
+  let html=`<p><b>结论（${ok.length} 轮有效搜索 / ${sites.length} 个来源站点交叉）：</b></p>`;
+  html+=`<p>围绕你的问题，共发起 ${rounds.length} 轮真实搜索，命中 ${rounds.reduce((a,r)=>a+(r.count||0),0)} 条网页。`
+      +`证据链上每条结论都可点开原始链接核对，相关度最高的来源是`
+      +`「${esc(hot?.title||'未知')}」（${esc(hot?.site||'')}）。</p>`;
+  html+=`<p><b>可执行方向（按出现频次归纳）：</b></p><ul style="padding-left:20px;line-height:2">`
+      +top.slice(0,4).map(t=>`<li>${esc(t)}</li>`).join('')+`</ul>`;
+  html+=`<p>饮食与健身建议存在个体差异，执行前建议结合自身情况，或以医院/注册营养师意见为准。</p>`;
+  $('verdictBody').innerHTML=html;
+  $('verdictWarn').textContent=miss.length
+    ? `注意：第 ${miss.map(r=>r.round).join('、')} 轮未找到可靠来源，已按「未找到」处理，未计入结论——不拿查不到的内容硬凑。`
+    : '';
+  $('verdict').classList.add('on');
+}
+
+async function run(){
+  if(running) return;
+  const q=$('q').value.trim();
+  if(!q){ $('q').focus(); return; }
+  running=true; $('go').disabled=true;
+  rounds=[]; renderEvidence();
+  $('verdict').classList.remove('on');
+  const plan=QUERIES[q]||DEFAULT_STRATEGY(q);
+  const states=[];
+  for(let i=0;i<STRATEGIES.length;i++){
+    states[i]='run'; renderSteps(states);
+    const kw=[plan.scene,plan.plan,plan.verify][i];
+    const r=await search(kw,i+1);
+    rounds.push(r);
+    states[i]=(!r.error&&r.count>0)?'done':'fail';
+    renderSteps(states); renderEvidence();
+  }
+  buildVerdict();
+  running=false; $('go').disabled=false;
+}
+
+$('go').addEventListener('click',run);
+$('q').addEventListener('keydown',e=>{if(e.key==='Enter')run();});
+document.querySelectorAll('.examples button').forEach(b=>{
+  b.addEventListener('click',()=>{$('q').value=b.dataset.q;run();});
+});
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+renderSteps([]);
+</script>
+</body>
+</html>

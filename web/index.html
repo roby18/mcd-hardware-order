@@ -1,0 +1,1137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 96'%3E%3Cg stroke='%23FFC72C' stroke-width='15' fill='none'%3E%3Cpath d='M12 88 C12 30 26 6 42 6 C58 6 68 30 68 88'/%3E%3Cpath d='M52 88 C52 30 66 6 82 6 C98 6 108 30 108 88'/%3E%3C/g%3E%3C/svg%3E">
+<title>麦门点餐台 · 硬件联动</title>
+<style>
+:root{
+  /* 麦当劳品牌色: 仅作点缀, 不铺满 */
+  --red:#DA291C; --red-d:#B81E12; --red-x:#9E1B12;
+  --gold:#FFC72C; --gold-d:#E8A800; --gold-s:#FFF6E0;
+  /* 苹果中性色系: 留白 + 细线 + 近黑 */
+  --bg:#F5F5F7;
+  --card:#FFFFFF;
+  --ink:#1D1D1F;
+  --dim:#86868B;
+  --line:#E5E5EA;
+  --line-2:#F0F0F3;
+  --ok:#1E9E5A;
+  --r:20px;
+  --r-s:14px;
+  --jelly:cubic-bezier(.34,1.42,.48,1);
+  --shadow:0 1px 2px rgba(0,0,0,.04), 0 10px 30px rgba(0,0,0,.06);
+  --shadow-s:0 1px 2px rgba(0,0,0,.05), 0 4px 14px rgba(0,0,0,.05);
+  --blur:saturate(180%) blur(20px);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","SF Pro Text","PingFang SC","Helvetica Neue","Microsoft YaHei","Segoe UI",sans-serif;
+  font-size:14px;line-height:1.5;padding:20px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1280px;margin:0 auto}
+
+/* ---------- 顶栏: 毛玻璃白卡 + 金拱红标 ---------- */
+header{
+  background:rgba(255,255,255,.72);
+  backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  border:1px solid var(--line);border-radius:var(--r);
+  padding:14px 20px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  box-shadow:var(--shadow-s);position:sticky;top:12px;z-index:40}
+.logo{display:flex;align-items:center;gap:11px}
+.logo svg{width:42px;height:34px;filter:drop-shadow(0 1px 1px rgba(0,0,0,.08))}
+.logo .tt1{color:var(--ink);font-size:20px;font-weight:700;letter-spacing:.2px}
+.logo .tt1 em{font-style:normal;color:var(--red)}
+.hsub{color:var(--dim);font-size:12px;margin-top:1px;font-weight:500}
+header .sp{flex:1}
+.pill{display:inline-flex;align-items:center;gap:7px;background:var(--card);
+  border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;
+  color:var(--ink);box-shadow:var(--shadow-s)}
+.pill .dot{width:8px;height:8px;border-radius:50%;background:#C7C7CC}
+.pill.on .dot{background:var(--ok);box-shadow:0 0 0 3px rgba(30,158,90,.18)}
+.pill.voice{background:var(--gold);color:#5A3B00;border-color:var(--gold);animation:pulse .9s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(255,199,44,.5)}
+  50%{box-shadow:0 0 0 7px rgba(255,199,44,0)}}
+
+/* ---------- 主栅格 / 卡片 ---------- */
+.grid{display:grid;grid-template-columns:384px 1fr 372px;gap:16px;margin-top:16px;align-items:start}
+@media(max-width:1180px){.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  padding:18px;box-shadow:var(--shadow)}
+.card+.card{margin-top:16px}
+.card h2{font-size:13px;font-weight:700;color:var(--ink);letter-spacing:.3px;
+  margin-bottom:14px;display:flex;align-items:center;gap:8px}
+.card h2::before{content:"";width:13px;height:13px;border-radius:4px;background:var(--gold)}
+.card h2 .en{color:var(--dim);font-size:10px;font-weight:600;letter-spacing:.5px;margin-left:2px}
+
+/* ---------- 唱机 / 旋钮: 苹果质感 + 金拱光环 ---------- */
+.ttcard{text-align:center;padding-top:20px;position:relative;overflow:hidden}
+.ttwrap{position:relative;width:286px;height:286px;margin:6px auto 8px;
+  touch-action:none;user-select:none;cursor:grab;z-index:1}
+.ttwrap::after{content:"";position:absolute;inset:-7px;border-radius:50%;
+  border:1px solid rgba(255,199,44,.28);pointer-events:none;z-index:0}
+.ttwrap:active{cursor:grabbing}
+.tt-disc{position:absolute;inset:0;border-radius:50%;
+  background:radial-gradient(circle at 50% 38%,#3A3A3C 0%,#2C2C2E 40%,#232325 70%,#1C1C1E 100%);
+  box-shadow:0 18px 40px rgba(0,0,0,.22),inset 0 0 0 1px rgba(255,255,255,.06),inset 0 2px 6px rgba(255,255,255,.08);
+  will-change:transform}
+.tt-grooves{position:absolute;inset:18px;border-radius:50%;
+  background:repeating-radial-gradient(circle at 50% 50%,
+    rgba(255,255,255,.045) 0 1px, rgba(255,255,255,0) 1px 6px);
+  will-change:filter}
+.tt-sheen{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:linear-gradient(125deg,rgba(255,255,255,.14) 0%,rgba(255,255,255,0) 34%,
+    rgba(255,255,255,0) 64%,rgba(255,255,255,.07) 80%,rgba(255,255,255,0) 100%)}
+.tt-label{position:absolute;left:50%;top:50%;width:148px;height:148px;
+  transform:translate(-50%,-50%);border-radius:50%;overflow:hidden;
+  background:var(--card);z-index:5;cursor:pointer;
+  box-shadow:0 0 0 4px var(--card),0 0 0 6px rgba(255,199,44,.9),0 8px 22px rgba(0,0,0,.30)}
+.tt-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;background:#fff}
+.tt-fallback{position:absolute;inset:0;display:none;align-items:center;justify-content:center;
+  font-size:44px;font-weight:700;color:var(--red);background:linear-gradient(160deg,#FFF6E0,#FFE9B0)}
+.tt-label.failed .tt-photo{display:none}
+.tt-label.failed .tt-fallback{display:flex}
+.tt-cap2{position:absolute;left:0;right:0;bottom:0;padding:20px 8px 9px;
+  background:linear-gradient(180deg,rgba(20,8,6,0),rgba(20,8,6,.80) 48%);
+  display:flex;flex-direction:column;align-items:center;gap:1px;pointer-events:none}
+.tt-cap2 .nm{font-size:12px;font-weight:600;color:#fff;line-height:1.2;
+  max-width:134px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;word-break:break-all;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.tt-cap2 .pr{font-size:17px;font-weight:700;color:var(--gold);line-height:1.1;text-shadow:0 1px 2px rgba(0,0,0,.5)}
+.tt-label.flip{animation:flip .26s cubic-bezier(.34,1.42,.48,1)}
+@keyframes flip{0%{transform:translate(-50%,-50%) scaleX(.55) rotate(-4deg);opacity:.4}
+  100%{transform:translate(-50%,-50%) scaleX(1) rotate(0);opacity:1}}
+.tt-hole{position:absolute;left:50%;top:50%;width:13px;height:13px;
+  transform:translate(-50%,-50%);border-radius:50%;background:var(--bg);
+  box-shadow:inset 0 1px 2px rgba(0,0,0,.5),0 0 0 2px rgba(255,255,255,.2);z-index:2}
+.tt-notch{position:absolute;left:50%;top:-3px;transform:translateX(-50%);
+  width:9px;height:9px;border-radius:50%;background:var(--gold);
+  box-shadow:0 0 0 3px rgba(255,255,255,.85),0 2px 4px rgba(0,0,0,.2);z-index:6}
+.tt-arm{display:none}
+.tt-cap{font-size:12px;color:var(--dim);margin:4px 0 12px}
+.tt-cap b{color:var(--red)}
+.mic{display:inline-flex;align-items:center;gap:9px;border:none;cursor:pointer;
+  background:linear-gradient(180deg,#FFD95E,var(--gold) 60%,var(--gold-d));
+  color:#5A3B00;font-weight:700;font-size:14px;border-radius:980px;padding:11px 24px;
+  box-shadow:0 4px 14px rgba(255,199,44,.35);font-family:inherit;letter-spacing:.2px;transition:transform .12s,box-shadow .12s}
+.mic:active{transform:translateY(1px);box-shadow:0 2px 8px rgba(255,199,44,.3)}
+.mic svg{width:16px;height:16px}
+.ttwrap.voice~.tt-cap{color:var(--red);font-weight:700}
+
+/* ---------- 邻近餐品条 ---------- */
+.nstrip{position:relative;height:112px;margin:4px -8px 0;overflow:hidden;
+  -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 15%,#000 85%,transparent 100%);
+  mask-image:linear-gradient(90deg,transparent 0,#000 15%,#000 85%,transparent 100%)}
+.nchip{position:absolute;left:50%;top:6px;width:58px;margin-left:-29px;
+  background:var(--card);border:1px solid var(--line);border-radius:14px;
+  padding:7px 5px 6px;text-align:center;cursor:pointer;
+  transition:transform .5s var(--jelly),opacity .4s,filter .4s,box-shadow .3s;
+  will-change:transform,opacity,filter;box-shadow:var(--shadow-s)}
+.nchip .nthumb{width:34px;height:34px;border-radius:50%;object-fit:cover;display:block;
+  margin:0 auto 3px;background:var(--line-2);border:1px solid var(--line)}
+.nchip.cur .nthumb{width:44px;height:44px;border-color:var(--gold);box-shadow:0 3px 10px rgba(218,41,28,.15)}
+.nchip .nn{font-size:10px;font-weight:600;line-height:1.25;height:26px;overflow:hidden;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-all}
+.nchip .np{font-size:11px;font-weight:700;color:var(--red);margin-top:2px}
+.nchip.cur{width:78px;margin-left:-39px;border-color:var(--gold);
+  background:linear-gradient(180deg,#FFFDF7,var(--gold-s));
+  box-shadow:0 6px 18px rgba(255,199,44,.25)}
+.nchip.cur .nn{font-size:11px;height:30px}
+.nchip.cur .np{font-size:13px}
+
+/* ---------- LIVE INPUT 硬件镜像 ---------- */
+.hwcard{background:#1D1D1F;border:1px solid #1D1D1F;color:#EDEDED;border-radius:var(--r)}
+.hwcard h2{color:var(--gold)}
+.hwcard h2::before{background:var(--red);box-shadow:0 0 0 2px rgba(218,41,28,.3)}
+.hwrow{display:flex;gap:12px;align-items:center}
+.hwkeys{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;flex:1}
+.hwk{aspect-ratio:1.6;border-radius:12px;border:1px solid rgba(255,255,255,.1);
+  background:rgba(255,255,255,.06);color:rgba(255,255,255,.5);
+  font-size:11px;font-weight:600;display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s,box-shadow .12s,transform .12s var(--jelly)}
+.hwk.pressed{background:rgba(255,199,44,.22);border-color:rgba(255,199,44,.5);
+  color:#fff;box-shadow:0 0 14px rgba(255,199,44,.4);transform:scale(.93)}
+.hwknob{position:relative;width:58px;height:58px;border-radius:50%;flex:none;
+  background:radial-gradient(circle at 35% 30%,#FF6A4D,#DA291C 72%);
+  box-shadow:0 6px 18px rgba(218,41,28,.4),inset 0 2px 5px rgba(255,255,255,.3),inset 0 -3px 8px rgba(0,0,0,.3)}
+.hwdot{position:absolute;inset:0;border-radius:50%;pointer-events:none}
+.hwdot::before{content:'';position:absolute;top:5px;left:50%;width:7px;height:7px;
+  margin-left:-3.5px;border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.4)}
+.hwdir{margin-top:10px;font-size:11px;color:rgba(255,255,255,.55);
+  display:flex;justify-content:space-between;align-items:center}
+.hwdir b{color:var(--gold);font-weight:700}
+
+/* ============ 设置 / 配置 ============ */
+.gear{width:38px;height:38px;border-radius:11px;border:1px solid var(--line);
+  background:rgba(255,255,255,.8);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  color:var(--ink);transition:.15s;flex:none}
+.gear:hover{border-color:var(--gold);transform:rotate(30deg);color:var(--red)}
+.gear svg{width:19px;height:19px}
+
+.drawer{position:fixed;top:0;right:0;bottom:0;width:396px;max-width:92vw;
+  background:rgba(255,255,255,.96);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);
+  border-left:1px solid var(--line);box-shadow:-20px 0 60px rgba(0,0,0,.12);
+  transform:translateX(102%);transition:transform .34s cubic-bezier(.34,1.1,.5,1);
+  z-index:60;display:flex;flex-direction:column}
+.drawer.on{transform:translateX(0)}
+.drawer header{padding:18px 20px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.drawer header h3{margin:0;font-size:17px;font-weight:700;color:var(--ink)}
+.drawer header .en{font-size:10px;color:var(--dim);font-weight:600;letter-spacing:.08em}
+.drawer .body{flex:1;overflow-y:auto;padding:18px 20px 26px}
+.drawer .x{margin-left:auto;width:30px;height:30px;border-radius:9px;border:1px solid var(--line);
+  background:#fff;cursor:pointer;font-size:15px;color:var(--dim);line-height:1}
+.drawer .x:hover{border-color:var(--red);color:var(--red)}
+.dsec{margin-bottom:22px}
+.dsec>h4{margin:0 0 10px;font-size:13px;font-weight:700;color:var(--ink);display:flex;align-items:center;gap:7px}
+.dsec>h4::before{content:'';width:4px;height:14px;border-radius:2px;background:var(--gold)}
+.dsec>h4 small{margin-left:auto;font-weight:600;color:var(--dim);font-size:10px}
+.eng{display:flex;flex-direction:column;gap:8px}
+.engopt{display:flex;align-items:center;gap:11px;padding:12px 13px;border:1px solid var(--line);
+  border-radius:14px;cursor:pointer;transition:.14s;background:#fff}
+.engopt:hover{border-color:var(--gold)}
+.engopt.on{border-color:var(--red);background:linear-gradient(180deg,#FFF9F7,#FFF1EE)}
+.engopt .ic{width:36px;height:36px;border-radius:11px;flex:none;display:flex;align-items:center;
+  justify-content:center;font-size:16px;background:var(--gold-s);color:#8A5A00}
+.engopt.on .ic{background:var(--red);color:#fff}
+.engopt .t{font-size:13px;font-weight:700;color:var(--ink)}
+.engopt .d{font-size:11px;color:var(--dim);margin-top:2px;line-height:1.4}
+.fld2{margin-top:10px}
+.fld2 .lb{font-size:11px;font-weight:600;color:var(--dim);margin-bottom:5px}
+.fld2 input,.fld2 select{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:11px;
+  font-size:13px;font-family:inherit;background:#fff;color:var(--ink);transition:border-color .14s}
+.fld2 input:focus,.fld2 select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,199,44,.15)}
+.hint{font-size:11px;color:var(--dim);line-height:1.5;margin-top:7px}
+.btnrow2{display:flex;gap:8px;margin-top:14px}
+.btnrow2 .btn{flex:1}
+
+/* 硬件镜像: 默认收起成小图标 */
+.hwcard{display:none}
+.hwcard.on{display:block}
+.hwfab{position:fixed;left:22px;bottom:22px;z-index:50;width:56px;height:56px;border-radius:18px;
+  border:1px solid rgba(255,255,255,.18);cursor:pointer;
+  background:rgba(29,29,31,.82);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  color:var(--gold);box-shadow:0 12px 30px rgba(0,0,0,.3);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;transition:.18s}
+.hwfab:hover{transform:translateY(-3px);background:rgba(29,29,31,.92)}
+.hwfab:active{transform:scale(.94)}
+.hwfab svg{width:21px;height:21px}
+.hwfab small{font-size:8.5px;font-weight:700;letter-spacing:.04em;color:#B9ABA2}
+.hwfab .leds{display:flex;gap:2.5px}
+.hwfab .leds i{width:4px;height:4px;border-radius:1px;background:#6B5A52}
+.hwfab .leds i.on{background:#FF8A75;box-shadow:0 0 4px rgba(255,99,71,.8)}
+
+/* 键帽配置小钮 */
+.k{position:relative}
+.k .cfg{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:7px;
+  border:none;background:rgba(0,0,0,.08);color:var(--ink);cursor:pointer;font-size:11px;line-height:1;
+  display:flex;align-items:center;justify-content:center;opacity:0;transition:.15s;padding:0}
+.k:hover .cfg{opacity:.6}
+.k .cfg:hover{opacity:1;background:rgba(0,0,0,.14)}
+.k.enter .cfg{display:none}
+.k .nm{padding-right:16px}
+.k .pr{display:block;font-size:11px;font-weight:700;color:var(--red);margin-top:3px;line-height:1.1}
+
+/* 模态 */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.28);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);
+  display:none;align-items:center;justify-content:center;padding:20px;z-index:70}
+.modal.on{display:flex}
+.modal .box{background:#fff;border-radius:22px;width:460px;max-width:94vw;max-height:86vh;
+  display:flex;flex-direction:column;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.25)}
+.modal .box header{padding:16px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:9px}
+.modal .box header h3{margin:0;font-size:16px;font-weight:700}
+.modal .box .body{padding:16px 18px;overflow-y:auto}
+.modal .box footer{padding:13px 18px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end}
+.kmrow{display:flex;align-items:center;gap:9px;padding:10px 11px;border:1px solid var(--line);
+  border-radius:12px;margin-bottom:7px;cursor:pointer;transition:.12s;background:#fff}
+.kmrow:hover{border-color:var(--gold)}
+.kmrow.on{border-color:var(--red);background:#FFF9F8}
+.kmrow .kn{width:28px;height:28px;border-radius:9px;background:var(--red);color:#fff;
+  font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.kmrow .kx{font-size:13px;font-weight:600;color:var(--ink)}
+.kmrow .kp{font-size:11px;color:var(--dim);margin-left:auto;font-weight:600}
+.kmrow.act .kn{background:#5B4A3F}
+.seg{display:inline-flex;background:#F0F0F3;border-radius:11px;padding:3px;gap:3px}
+.seg button{border:none;background:transparent;padding:6px 14px;border-radius:8px;font-size:12px;
+  font-weight:600;color:var(--dim);cursor:pointer;font-family:inherit;transition:.14s;white-space:nowrap}
+.seg button.on{background:#fff;color:var(--red);box-shadow:0 2px 6px rgba(0,0,0,.1)}
+
+/* 语音浮层 */
+.vlayer{position:fixed;inset:0;background:rgba(0,0,0,.4);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
+  display:none;align-items:center;justify-content:center;z-index:50}
+.vlayer.on{display:flex}
+.vbox{background:rgba(255,255,255,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border-radius:26px;padding:32px 44px;text-align:center;box-shadow:0 24px 70px rgba(0,0,0,.3);
+  border:1px solid rgba(255,255,255,.5);max-width:80vw}
+.wave{display:flex;gap:5px;justify-content:center;align-items:flex-end;height:38px;margin-bottom:14px}
+.wave i{width:7px;border-radius:4px;background:var(--red);animation:wv 1s ease-in-out infinite}
+.wave i:nth-child(1){height:12px;animation-delay:0s}
+.wave i:nth-child(2){height:26px;animation-delay:.12s}
+.wave i:nth-child(3){height:38px;animation-delay:.24s}
+.wave i:nth-child(4){height:20px;animation-delay:.36s}
+.wave i:nth-child(5){height:30px;animation-delay:.48s}
+.wave i:nth-child(6){height:14px;animation-delay:.6s}
+@keyframes wv{0%,100%{transform:scaleY(.45)}50%{transform:scaleY(1)}}
+.vbox .t1{font-size:18px;font-weight:700;color:var(--ink)}
+.vbox .t2{font-size:13px;color:var(--dim);margin-top:5px}
+
+/* ---------- 菜单 ---------- */
+.tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.tab{border:1px solid var(--line);background:#fff;color:var(--dim);cursor:pointer;
+  border-radius:999px;padding:6px 14px;font-size:12px;font-weight:600;font-family:inherit;transition:.14s}
+.tab:hover{border-color:var(--gold)}
+.tab.on{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 3px 10px rgba(218,41,28,.25)}
+.tab small{opacity:.8;font-weight:400;margin-left:3px}
+.menu{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:10px;
+  max-height:428px;overflow-y:auto;padding:4px}
+.mi{border:1px solid var(--line);border-radius:16px;padding:11px 12px;cursor:pointer;
+  background:#fff;transition:transform .45s var(--jelly),border-color .15s,box-shadow .15s;position:relative;text-align:left;
+  display:grid;grid-template-columns:54px 1fr;grid-template-rows:auto auto;gap:2px 10px;align-items:center;
+  box-shadow:var(--shadow-s)}
+.mi .thumb{grid-row:1/3;width:54px;height:54px;border-radius:12px;object-fit:cover;
+  background:var(--line-2);border:1px solid var(--line)}
+.mi:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 8px 20px rgba(0,0,0,.08)}
+.mi.sel{border-color:var(--red);background:#FFF9F8;box-shadow:0 0 0 3px rgba(218,41,28,.12)}
+.mi.sel::after{content:"旋钮选中";position:absolute;top:-9px;left:9px;background:var(--red);
+  color:#fff;font-size:10px;font-weight:600;border-radius:999px;padding:2px 9px;box-shadow:0 3px 8px rgba(218,41,28,.25)}
+.mi .nm{font-size:13px;font-weight:600;line-height:1.3;min-height:34px;display:flex;align-items:center}
+.mi .p{font-size:17px;font-weight:700;color:var(--red);margin-top:5px}
+.mi .p s{font-size:11px;color:var(--dim);font-weight:400;margin-left:5px}
+.mi .pr{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mi .tag{display:inline-block;font-size:10px;font-weight:600;border-radius:6px;padding:2px 7px}
+.mi .tag.main{background:var(--gold-s);color:#8A6100}
+.mi .tag.side{background:#E8F5EE;color:var(--ok)}
+.mi .tag.drink{background:#E8F0FB;color:#2B5FB8}
+.mi .tag.other{background:#F2EEE9;color:var(--dim)}
+.mi .add{position:absolute;right:9px;bottom:9px;width:26px;height:26px;border-radius:9px;
+  border:none;background:var(--gold);color:#5A3B00;font-size:17px;font-weight:700;
+  cursor:pointer;line-height:1;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 3px 8px rgba(255,199,44,.35);transition:transform .1s}
+.mi .add:active{transform:translateY(1px);box-shadow:0 1px 4px rgba(255,199,44,.3)}
+
+/* ---------- 按键 ---------- */
+.keys{display:grid;grid-template-columns:repeat(7,1fr) 1.5fr;gap:10px}
+@media(max-width:820px){.keys{grid-template-columns:repeat(4,1fr)}}
+.k{border:1px solid var(--line);cursor:pointer;border-radius:16px;padding:12px 8px 10px;
+  background:linear-gradient(180deg,#FFFFFF,#FCFCFD);color:var(--ink);font-family:inherit;
+  box-shadow:var(--shadow-s);display:flex;flex-direction:column;align-items:center;gap:3px;
+  transition:transform .12s,box-shadow .12s,border-color .15s;min-height:78px}
+.k:active{transform:translateY(1px);box-shadow:0 1px 3px rgba(0,0,0,.08);border-color:var(--gold)}
+.k:hover{border-color:var(--gold)}
+.k .n{font-size:17px;font-weight:700;line-height:1;color:var(--ink)}
+.k.enter .n{font-size:15px;font-weight:700}
+.k .nm{font-size:11px;font-weight:600;opacity:.9;line-height:1.25;text-align:center;
+  max-width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.k.enter{background:linear-gradient(180deg,#FFD95E,var(--gold) 62%,var(--gold-d));
+  color:#5A3B00;border-color:var(--gold-d);box-shadow:0 6px 16px rgba(255,199,44,.3)}
+.k.enter:active{transform:translateY(1px);box-shadow:0 2px 8px rgba(255,199,44,.28);border-color:var(--gold-d)}
+.k.enter .nm{font-weight:700;opacity:1}
+.k.enter .pr{color:#7A4E00;font-weight:700}
+.k.pressed{animation:kf .18s}
+@keyframes kf{50%{filter:brightness(1.04);box-shadow:0 0 0 3px rgba(218,41,28,.25)}}
+
+/* ---------- 餐盘 / 算价 ---------- */
+.receipt{border:1px solid var(--line);border-radius:14px;padding:11px 13px;background:#FCFCFD}
+.cr{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line-2)}
+.cr:last-child{border-bottom:none}
+.cr .nm{flex:1;font-size:13px;font-weight:600}
+.cr .nm small{display:block;font-size:11px;color:var(--dim);font-weight:400}
+.qty{display:flex;align-items:center;gap:6px}
+.qty button{width:24px;height:24px;border-radius:8px;border:1px solid var(--line);
+  background:#fff;color:var(--red);cursor:pointer;font-size:14px;font-weight:700;line-height:1;transition:.12s}
+.qty button:hover{border-color:var(--red);background:#FFF5F4}
+.qty b{min-width:18px;text-align:center;font-size:13px}
+.empty{color:var(--dim);text-align:center;padding:24px 0;font-size:13px}
+.prow{display:flex;justify-content:space-between;align-items:center;padding:7px 0;font-size:13px}
+.prow .pk{color:var(--dim)}
+.prow .v{font-weight:600}
+.prow.pay{border-top:1px solid var(--ink);margin-top:6px;padding-top:11px}
+.prow.pay .v{font-size:28px;font-weight:700;color:var(--red);letter-spacing:-.5px}
+.savebadge{display:inline-block;background:var(--gold);color:#5A3B00;font-weight:700;
+  font-size:12px;border-radius:999px;padding:3px 12px}
+.balance{margin-top:11px;background:linear-gradient(180deg,#FFFDF7,var(--gold-s));border:1px solid var(--gold);
+  border-radius:13px;padding:10px 13px;font-size:13px;font-weight:600;color:#7A5200;
+  display:flex;gap:8px;align-items:flex-start}
+.balance svg{flex:none;width:16px;height:16px;margin-top:2px}
+.couponline{margin-top:9px;font-size:12px;color:var(--dim)}
+.couponline b{color:var(--ok)}
+.mini{font-size:11px;color:var(--dim);margin-top:5px}
+.btnrow{display:flex;gap:8px;margin-top:12px}
+.btn{flex:1;border:1px solid var(--line);background:#fff;color:var(--ink);
+  border-radius:12px;padding:9px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;transition:.14s}
+.btn:hover{border-color:var(--gold)}
+.btn:active{transform:translateY(1px)}
+.btn.red{background:var(--red);border-color:var(--red);color:#fff;box-shadow:0 4px 12px rgba(218,41,28,.25)}
+.btn.red:hover{background:var(--red-d)}
+.btn.gold{background:linear-gradient(180deg,#FFD95E,var(--gold));border-color:var(--gold-d);color:#5A3B00;box-shadow:0 4px 12px rgba(255,199,44,.3)}
+.btn.gold:hover{filter:brightness(1.04)}
+
+/* ---------- AI 配单 ---------- */
+.ctrls{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
+.fld .lb{font-size:11px;color:var(--dim);font-weight:600;margin-bottom:5px}
+input,select{background:#fff;border:1px solid var(--line);color:var(--ink);
+  border-radius:11px;padding:9px 11px;font-size:14px;width:100%;font-family:inherit;font-weight:600;transition:.14s}
+input:focus,select:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(255,199,44,.15)}
+.planmsg{margin-top:11px;font-size:13px;font-weight:600;color:var(--ok);min-height:20px}
+.planmsg.err{color:var(--red)}
+
+/* ---------- 日志 ---------- */
+.log{margin-top:16px;font-size:12px;color:var(--dim);max-height:132px;overflow-y:auto;
+  font-family:ui-monospace,Menlo,Consolas,monospace;background:#1D1D1F;border-radius:14px;
+  padding:12px 14px;border:1px solid #1D1D1F}
+.log div{padding:2px 0;color:#D8CFC7}
+.log .t{color:#8A7E76;margin-right:8px}
+.log .hl{color:var(--gold);font-weight:700}
+footer{margin-top:16px;color:var(--dim);font-size:11px;text-align:center;padding-bottom:8px}
+</style>
+</head>
+<body>
+<div class="vlayer" id="vlayer">
+  <div class="vbox">
+    <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="t1" id="vtitle">我在听...</div>
+    <div class="t2" id="vsub">试试说：帮我配一桌两人六十块的</div>
+  </div>
+</div>
+
+<div class="wrap">
+<header>
+  <div class="logo">
+    <svg viewBox="0 0 120 96" aria-hidden="true">
+      <g stroke="#FFC72C" stroke-width="15" fill="none" stroke-linecap="butt">
+        <path d="M12 88 C12 30 26 6 42 6 C58 6 68 30 68 88"/>
+        <path d="M52 88 C52 30 66 6 82 6 C98 6 108 30 108 88"/>
+      </g>
+    </svg>
+    <div>
+      <div class="tt1">麦门<em>点餐台</em></div>
+      <div class="hsub">HARDWARE × 麦当劳 MCP × 小智语音</div>
+    </div>
+  </div>
+  <div class="sp"></div>
+  <button class="gear" id="gearBtn" title="设置">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="3.2"/>
+      <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1 1.55V21a2 2 0 1 1-4 0v-.09a1.7 1.7 0 0 0-1-1.55 1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.7 1.7 0 0 0 .34-1.87 1.7 1.7 0 0 0-1.55-1H3a2 2 0 1 1 0-4h.09a1.7 1.7 0 0 0 1.55-1 1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.87.34h.09a1.7 1.7 0 0 0 1-1.55V3a2 2 0 1 1 4 0v.09a1.7 1.7 0 0 0 1 1.55h.09a1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87v.09a1.7 1.7 0 0 0 1.55 1H21a2 2 0 1 1 0 4h-.09a1.7 1.7 0 0 0-1.55 1z"/>
+    </svg>
+  </button>
+  <div class="pill" id="voicePill" style="display:none"><span class="dot"></span><span id="voiceTxt">语音中</span></div>
+  <div class="pill" id="connPill"><span class="dot"></span><span id="conn">连接中</span></div>
+  <div class="pill" id="storePill" style="display:none"><span class="dot" style="background:var(--gold)"></span><span id="store"></span></div>
+</header>
+
+<div class="grid">
+  <!-- 左: 唱机旋钮 -->
+  <div>
+    <div class="card ttcard">
+      <h2>唱机旋钮 <span class="en">DIAL · 切歌式选餐</span></h2>
+      <div class="ttwrap" id="ttwrap">
+        <div class="tt-disc" id="ttDisc">
+          <div class="tt-grooves" id="ttGrooves"></div>
+          <div class="tt-label" id="ttLabel">
+            <img class="tt-photo" id="ttPhoto" alt="" src="">
+            <div class="tt-fallback" id="ttFallback">M</div>
+            <div class="tt-cap2">
+              <span class="nm" id="ttItem">--</span>
+              <span class="pr" id="ttPrice">--</span>
+            </div>
+          </div>
+          <div class="tt-sheen"></div>
+        </div>
+        <div class="tt-hole"></div>
+        <div class="tt-notch"></div>
+        <div class="tt-arm"><b></b><i></i></div>
+      </div>
+      <div class="nstrip" id="nstrip"></div>
+      <div class="tt-cap" id="ttCap">拖动黑胶旋转选餐 · <b>按下 = 语音点餐</b></div>
+      <button class="mic" id="micBtn">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/><path d="M12 17.5V21"/>
+        </svg>
+        按住说话
+      </button>
+      <div class="mini">键盘 ← → 也可旋转 · 回车加入餐盘</div>
+    </div>
+
+    <!-- 硬件镜像: 默认收起, 点右下角小图标展开 -->
+    <div class="card hwcard" id="hwPanel">
+      <h2>LIVE INPUT <span class="en">硬件镜像</span></h2>
+      <div class="hwrow">
+        <div class="hwkeys" id="hwkeys"></div>
+        <div class="hwknob"><div class="hwdot" id="hwdot"></div></div>
+      </div>
+      <div class="hwdir"><span>旋钮状态</span><b id="hwdirTxt">待机</b></div>
+    </div>
+  </div>
+
+  <!-- 中: 菜单 -->
+  <div class="card">
+    <h2>今日菜单 <span class="en">LIVE FROM 麦当劳 MCP</span></h2>
+    <div class="tabs" id="tabs"></div>
+    <div class="menu" id="menu"><div class="empty">菜单加载中...</div></div>
+  </div>
+
+  <!-- 右: 餐盘 + 算价 -->
+  <div>
+    <div class="card">
+      <h2>我的餐盘 <span class="en">TRAY</span></h2>
+      <div class="receipt" id="cart"><div class="empty">餐盘是空的<br>按按键、转旋钮或点菜单都可以加菜</div></div>
+      <div class="btnrow">
+        <button class="btn" onclick="clearCart()">清空餐盘</button>
+        <button class="btn gold" onclick="confirmOrder()">确认这一单</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>实时算价 <span class="en">MCP calculate-price</span></h2>
+      <div class="prow"><span class="pk">原价合计</span><span class="v" id="orig">--</span></div>
+      <div class="prow pay"><span class="pk">应付金额</span><span class="v" id="pay">--</span></div>
+      <div class="prow"><span class="pk">本单已省</span><span class="v"><span class="savebadge" id="disc">--</span></span></div>
+      <div class="balance" id="balance" style="display:none">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round">
+          <circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 3"/>
+        </svg>
+        <span id="balanceTxt"></span>
+      </div>
+      <div class="couponline" id="couponline"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 按键排: 键帽即映射, 每个键可单独配置 -->
+<div class="card" style="margin-top:14px">
+  <h2>实体按键 <span class="en">ESP32 · 8 KEYS · 键帽悬停可改绑定</span></h2>
+  <div class="keys" id="keys"></div>
+</div>
+
+<!-- AI 配单 -->
+<div class="card" style="margin-top:14px">
+  <h2>让 AI 配一单 <span class="en" id="engineLb">本地算法</span></h2>
+  <div class="ctrls" style="align-items:flex-end">
+    <div class="fld"><div class="lb">人数</div><input type="number" id="people" value="2" min="1" max="10"></div>
+    <div class="fld"><div class="lb">预算（元）</div><input type="number" id="budget" value="60" min="10" step="5"></div>
+    <div class="fld">
+      <div class="lb">配单引擎</div>
+      <div class="seg" id="engineSeg">
+        <button data-e="local" class="on">本地算法</button>
+        <button data-e="llm">大模型</button>
+      </div>
+    </div>
+    <button class="btn red" style="flex:none;padding:9px 26px;font-size:14px" onclick="plan()">生成</button>
+  </div>
+  <div class="fld" style="margin-top:9px"><div class="lb">忌口（逗号分隔）</div>
+    <input type="text" id="avoid" placeholder="例如：香菜, 牛肉"></div>
+  <div class="planmsg" id="planMsg"></div>
+</div>
+
+<div class="log" id="log"></div>
+<footer>价格与优惠来自麦当劳官方实时接口 · 本页只算价不下单 · WaytoAGI 1024 超能 Coding 周末</footer>
+</div>
+
+<!-- 硬件镜像浮动按钮(默认收起态) -->
+<button class="hwfab" id="hwFab" title="展开硬件镜像">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="2.5" y="5" width="19" height="14" rx="2.5"/>
+    <path d="M7 9.5h.01M11 9.5h.01M15 9.5h.01M7 14h10"/>
+  </svg>
+  <div class="leds" id="fabLeds"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+  <small>硬件镜像</small>
+</button>
+
+<!-- 设置抽屉 -->
+<div class="drawer" id="drawer">
+  <header>
+    <h3>设置</h3><span class="en">SETTINGS</span>
+    <button class="x" id="drawerClose">✕</button>
+  </header>
+  <div class="body">
+    <div class="dsec">
+      <h4>语音 / 智能引擎 <small id="engineNow"></small></h4>
+      <div class="eng" id="engList">
+        <div class="engopt" data-eng="xiaozhi">
+          <div class="ic">🎙</div>
+          <div><div class="t">小智语音（ESP32 硬件）</div>
+          <div class="d">旋钮按下说话，MCP over WebSocket 接云端。当前默认链路。</div></div>
+        </div>
+        <div class="engopt" data-eng="llm">
+          <div class="ic">🤖</div>
+          <div><div class="t">大模型 API（备选替代）</div>
+          <div class="d">OpenAI 兼容接口。网页配单/建议走大模型；语音仍可继续用小智。</div></div>
+        </div>
+      </div>
+      <div id="llmCfg" style="display:none">
+        <div class="fld2"><div class="lb">Base URL（OpenAI 兼容）</div>
+          <input id="llmBase" placeholder="https://api.deepseek.com"></div>
+        <div class="fld2"><div class="lb">API Key</div>
+          <input id="llmKey" type="password" placeholder="sk-..."></div>
+        <div class="fld2"><div class="lb">模型名</div>
+          <input id="llmModel" placeholder="deepseek-v4.1-flash"></div>
+        <div class="hint">配单时大模型只负责「选什么」，价格一律回店用麦当劳 MCP 真实计算——不会出现模型编造的价格。</div>
+        <div class="btnrow2">
+          <button class="btn" id="llmTest">测试连接</button>
+          <button class="btn gold" id="llmSave">保存并启用</button>
+        </div>
+        <div class="planmsg" id="llmMsg"></div>
+      </div>
+    </div>
+    <div class="dsec">
+      <h4>实体按键 <small>8 键均可改绑</small></h4>
+      <div class="hint" style="margin:0 0 10px">点「键位排」里任意键帽右上角的齿轮即可改绑：可绑任意菜单餐品，或系统动作。</div>
+      <div id="kmList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 键位配置模态 -->
+<div class="modal" id="kmModal">
+  <div class="box">
+    <header><h3 id="kmTitle">配置按键</h3><button class="x" id="kmClose" style="margin-left:auto">✕</button></header>
+    <div class="body" id="kmBody"></div>
+    <footer>
+      <button class="btn" id="kmReset">恢复默认</button>
+      <button class="btn red" id="kmSave">保存</button>
+    </footer>
+  </div>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let S={}, CATALOG=[], COUPONS=[], KEYMAP=[], activeCat='全部', LLM={};
+const fmt=n=>(typeof n==='number'?n:0).toFixed(2);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- API ---------------- */
+function post(path,body){
+  return fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body||{})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+}
+async function loadMenu(){
+  try{
+    const r=await fetch('/api/menu'); const d=await r.json();
+    CATALOG=d.catalog||[]; COUPONS=d.coupons||[];
+    renderTabs(); renderMenu(); renderKeys();
+    if(S.selected){ updateDisc(S.selected); syncMenuSelection(S.selected); }
+    renderStrip();
+  }catch(e){ $('menu').innerHTML='<div class="empty">菜单加载失败</div>'; }
+}
+
+/* 唱片中心: 菜品照片(三级回退: 本地缓存 -> 远程URL -> 首字) */
+function updateDisc(name){
+  const item=CATALOG.find(c=>c.name===name);
+  if($('ttItem').textContent!==name){ $('ttItem').textContent=name; flip(); }
+  $('ttPrice').textContent=item?('¥'+fmt(item.price)):'--';
+  if(!item){ $('ttLabel').classList.add('failed'); $('ttFallback').textContent='M'; return; }
+  const photo=$('ttPhoto');
+  if(photo.dataset.code===item.code && !$('ttLabel').classList.contains('failed')) return;
+  photo.dataset.code=item.code;
+  $('ttFallback').textContent=(item.name||'M').trim().charAt(0);
+  const local=item.localImg, remote=item.image;
+  const tryLoad=(src)=>{
+    if(!src){ $('ttLabel').classList.add('failed'); return; }
+    photo.onerror=()=>{ if(src===local && remote) tryLoad(remote); else $('ttLabel').classList.add('failed'); };
+    photo.onload=()=>$('ttLabel').classList.remove('failed');
+    photo.src=src;
+  };
+  $('ttLabel').classList.remove('failed');
+  tryLoad(local||remote);
+}
+
+/* 邻近餐品条: stylecam 环形最短距离 + 距离分层(scale/opacity/blur/brightness) */
+function ringOff(i,sel){
+  const N=CATALOG.length; if(!N)return 0;
+  let off=i-sel;
+  if(off>N/2)off-=N; if(off<-N/2)off+=N;
+  return off;
+}
+function renderStrip(){
+  const box=$('nstrip');
+  if(!CATALOG.length){ box.innerHTML=''; return; }
+  const sel=(typeof S.selection==='number')?S.selection:0;
+  if(box.children.length!==7){
+    box.innerHTML='';
+    for(let k=-3;k<=3;k++){
+      const c=document.createElement('div');
+      c.className='nchip'+(k===0?' cur':'');
+      c.innerHTML='<img class="nthumb" alt=""><div class="nn"></div><div class="np"></div>';
+      c.addEventListener('click',()=>{
+        post('/api/select',{index:(sel+k+CATALOG.length)%CATALOG.length}).then(()=>refresh());
+      });
+      box.appendChild(c);
+    }
+  }
+  const SCALE=[.58,.74,.92,1.18,.92,.74,.58];
+  [...box.children].forEach((chip,k)=>{
+    const off=k-3;
+    const it=CATALOG[(sel+off+CATALOG.length)%CATALOG.length];
+    if(!it)return;
+    const d=Math.abs(off);
+    chip.querySelector('.nn').textContent=it.name;
+    chip.querySelector('.np').textContent='¥'+fmt(it.price);
+    const th=chip.querySelector('.nthumb');
+    if(th.dataset.code!==it.code){
+      th.dataset.code=it.code;
+      th.onerror=function(){ if(this.src.indexOf(location.origin)===0 && it.image){ this.src=it.image; } else { this.style.visibility='hidden'; } };
+      th.onload=function(){ this.style.visibility='visible'; };
+      th.src=it.localImg||it.image||'';
+      if(!th.src) th.style.visibility='hidden';
+    }
+    chip.style.transform=`translateX(${off*72}px) scale(${SCALE[k]})`;
+    chip.style.opacity=String(1-d*.24);
+    chip.style.filter=d===0?'none':`blur(${(d*.55).toFixed(2)}px) brightness(${(1-d*.08).toFixed(2)})`;
+    chip.style.zIndex=String(10-d);
+  });
+}
+
+/* LIVE INPUT 硬件镜像: 按键高亮 + 旋钮白点 */
+function buildHwKeys(){
+  $('hwkeys').innerHTML=[1,2,3,4,5,6,7,8]
+    .map(n=>`<div class="hwk" data-k="${n}">S${n}</div>`).join('');
+}
+function pressHw(n){
+  const b=document.querySelector(`.hwk[data-k="${n}"]`); if(b)b.classList.add('pressed');
+  const l=document.querySelector(`#fabLeds i:nth-child(${n})`); if(l)l.classList.add('on');
+}
+function releaseHw(n){
+  const b=document.querySelector(`.hwk[data-k="${n}"]`); if(b)b.classList.remove('pressed');
+  const l=document.querySelector(`#fabLeds i:nth-child(${n})`); if(l)l.classList.remove('on');
+}
+let lastDir='';
+function updateHwPanel(){
+  $('hwdot').style.transform=`rotate(${ang.toFixed(1)}deg)`;
+  const spd=Math.abs(vel);
+  const dir=spd>1.6?(vel>0?'顺时针 ↻':'逆时针 ↺'):'待机';
+  if(dir!==lastDir){ $('hwdirTxt').textContent=dir; lastDir=dir; }
+}
+
+/* ---------------- 菜单 ---------------- */
+function cats(){
+  const m=new Map();
+  for(const c of CATALOG){ const k=c.cat||'其他'; m.set(k,(m.get(k)||0)+1); }
+  return [...m.entries()];
+}
+function renderTabs(){
+  const list=[['全部',CATALOG.length],...cats()];
+  $('tabs').innerHTML=list.map(([n,c])=>
+    `<button class="tab ${n===activeCat?'on':''}" onclick="setCat('${esc(n)}')">${esc(n)}<small>${c}</small></button>`).join('');
+}
+function setCat(n){ activeCat=n; renderTabs(); renderMenu(); }
+function renderMenu(){
+  const items=activeCat==='全部'?CATALOG:CATALOG.filter(c=>(c.cat||'其他')===activeCat);
+  if(!items.length){ $('menu').innerHTML='<div class="empty">该分类下没有餐品</div>'; return; }
+  $('menu').innerHTML=items.map(c=>{
+    const off=c.original&&c.original>c.price;
+    return `<div class="mi" data-code="${esc(c.code)}" data-name="${esc(c.name)}" onclick="addCode('${esc(c.code)}')">
+      <img class="thumb" alt="" src="${esc(c.localImg||c.image||'')}" onerror="this.src='${esc(c.image||'')}';this.onerror=function(){this.style.visibility='hidden'}">
+      <div class="nm">${esc(c.name)}</div>
+      <div class="pr"><span class="p">¥${fmt(c.price)}${off?`<s>¥${fmt(c.original)}</s>`:''}</span><span class="tag ${esc(c.role||'other')}">${{main:'主食',side:'小食',drink:'饮品'}[c.role]||'其他'}</span></div>
+      <button class="add" onclick="event.stopPropagation();addCode('${esc(c.code)}')">+</button>
+    </div>`;
+  }).join('');
+}
+function syncMenuSelection(name){
+  document.querySelectorAll('.mi').forEach(el=>{
+    const on=el.dataset.name===name;
+    el.classList.toggle('sel',on);
+    if(on) el.scrollIntoView({block:'nearest'});
+  });
+}
+
+/* ---------------- 按键 ---------------- */
+/* ---------------- 按键: 键帽即映射, 可逐键配置 ---------------- */
+function keyLabel(n){
+  // 返回 {name, price, kind} : kind=item|action|default
+  const km=(S.keymap||{})[String(n)];
+  if(km){
+    if(km.type==='action'){
+      const A={confirm:['确认这一单','算价并记录'],clear:['清空餐盘','一键清空']};
+      const a=A[km.action]||[km.action,''];
+      return {name:a[0],price:'',kind:'action'};
+    }
+    const it=CATALOG.find(c=>c.code===km.code);
+    if(it) return {name:it.name,price:'¥'+fmt(it.price),kind:'item'};
+    return {name:'已下架·待重绑',price:'',kind:'action'};
+  }
+  // 默认: 1-7 = 当前菜单前 7 个主食, 8 = 确认
+  if(n===8) return {name:'确认这一单',price:'算价并记录',kind:'action'};
+  const mains=CATALOG.filter(c=>c.role==='main');
+  const pool=(mains.length>=7?mains:CATALOG).slice(0,7);
+  const it=pool[n-1];
+  return it?{name:it.name,price:'¥'+fmt(it.price),kind:'item'}
+           :{name:'--',price:'',kind:'default'};
+}
+function renderKeys(){
+  let h='';
+  for(let i=1;i<=8;i++){
+    const L=keyLabel(i);
+    h+=`<button class="k ${i===8?'enter':''}" data-key="${i}">
+      <span class="n">${i===8?'8 · 确认':i}</span>
+      <span class="nm">${esc(L.name)}</span>
+      <span class="pr">${esc(L.price)}</span>
+      ${i===8?'':`<button class="cfg" data-cfg="${i}" title="改绑这个键">⚙</button>`}
+    </button>`;
+  }
+  $('keys').innerHTML=h;
+  document.querySelectorAll('.k').forEach(b=>b.addEventListener('click',e=>{
+    if(e.target.classList.contains('cfg'))return;   // 配置钮不触发按键
+    key(parseInt(b.dataset.key)); flashKey(b);
+  }));
+  document.querySelectorAll('.k .cfg').forEach(b=>b.addEventListener('click',e=>{
+    e.stopPropagation(); openKm(parseInt(b.dataset.cfg));
+  }));
+}
+function flashKey(b){ if(!b)return; b.classList.remove('pressed'); void b.offsetWidth; b.classList.add('pressed'); }
+
+/* ---------------- 操作 ---------------- */
+function addCode(code){ post('/api/add',{code,qty:1}).then(()=>refresh()); }
+function rm(code,qty){ post('/api/remove',{code,qty}).then(()=>refresh()); }
+function dial(d){ post('/api/dial',{delta:d}).then(()=>refresh()); }
+function addSel(){ post('/api/add',{qty:1}).then(()=>refresh()); }
+function clearCart(){ post('/api/clear').then(()=>refresh()); }
+function confirmOrder(){
+  post('/api/key',{key:8}).then(r=>{
+    const p=(r&&r.price)||{};
+    flashKey(document.querySelector('.k.enter'));
+    $('planMsg').textContent=`已确认: 应付 ${fmt(p.payable||0)} 元, 已省 ${fmt(p.discount||0)} 元`;
+    $('planMsg').classList.remove('err');
+    refresh();
+  });
+}
+function key(n){
+  pressHw(n);
+  setTimeout(()=>releaseHw(n),260);   // 松灯与网络解耦, 不等 MCP 算价
+  post('/api/key',{key:n}).then(r=>{
+    if(r&&r.error){ $('planMsg').textContent=r.error; $('planMsg').classList.add('err'); }
+    refresh();
+  });
+}
+let planEngine='local';
+function plan(){
+  const msg=$('planMsg'); msg.textContent='生成中...'; msg.classList.remove('err');
+  post('/api/plan',{
+    people:$('people').value, budget:$('budget').value, avoid:$('avoid').value,
+    engine:planEngine
+  }).then(r=>{
+    if(r&&r.error){ msg.textContent='失败: '+r.error+(r.note?('（'+r.note+'）'):''); msg.classList.add('err'); }
+    else{
+      msg.textContent='已生成: 应付 '+fmt(r.payable)+' 元, 省 '+fmt(r.discount)+' 元'
+        +(r.balance>0?(' · 再加 '+fmt(r.balance)+' 元可解锁 '+r.next):'')
+        +(r.engine==='llm'?(' · '+r.model+' 选餐'):'')
+        +(r.note?(' · '+r.note):'');
+    }
+    refresh();
+  });
+}
+
+/* ---------------- 设置: 大模型备选引擎 ---------------- */
+async function loadConfig(){
+  try{
+    const d=await (await fetch('/api/config')).json();
+    LLM=d.llm||{};
+    $('llmBase').value=LLM.base||'';
+    $('llmKey').value=LLM.key||'';        // 服务端已脱敏(***后4位), 保存时原样带回即可
+    $('llmModel').value=LLM.model||'deepseek-v4.1-flash';
+    setEngine(d.engine==='llm'?'llm':'xiaozhi');
+    renderKmList();
+  }catch(e){ console.warn('config load fail',e); }
+}
+function setEngine(eng){
+  document.querySelectorAll('.engopt').forEach(o=>o.classList.toggle('on',o.dataset.eng===eng));
+  $('llmCfg').style.display=eng==='llm'?'':'none';
+  $('engineNow').textContent=eng==='llm'?(LLM.model||'大模型'):'小智语音';
+  planEngine=(eng==='llm')?'llm':'local';
+  document.querySelectorAll('#engineSeg button').forEach(b=>b.classList.toggle('on',b.dataset.e===planEngine));
+  $('engineLb').textContent=planEngine==='llm'?(LLM.model||'大模型选餐'):'本地算法';
+  localStorage.setItem('mcd-engine',eng);
+}
+document.querySelectorAll('.engopt').forEach(o=>o.addEventListener('click',()=>setEngine(o.dataset.eng)));
+document.querySelectorAll('#engineSeg button').forEach(b=>b.addEventListener('click',()=>{
+  planEngine=b.dataset.e;
+  document.querySelectorAll('#engineSeg button').forEach(x=>x.classList.toggle('on',x===b));
+  $('engineLb').textContent=planEngine==='llm'?(LLM.model||'大模型选餐'):'本地算法';
+}));
+function llmMsg(t,err){ const m=$('llmMsg'); m.textContent=t; m.classList.toggle('err',!!err); }
+$('llmTest').addEventListener('click',async()=>{
+  llmMsg('测试中...',false);
+  // 先暂存再测(测试用的是服务端当前配置)
+  await post('/api/llm-config',{base:$('llmBase').value,key:$('llmKey').value,
+    model:$('llmModel').value,enabled:true});
+  const r=await post('/api/llm-config',{test:true});
+  llmMsg(r.ok?('连接成功: '+String(r.msg).replace(/\s+/g,' ').slice(0,80)):('失败: '+r.msg),!r.ok);
+});
+$('llmSave').addEventListener('click',async()=>{
+  const r=await post('/api/llm-config',{base:$('llmBase').value,key:$('llmKey').value,
+    model:$('llmModel').value,enabled:true});
+  if(r.ok){ LLM=r.llm; setEngine('llm'); llmMsg('已保存并启用',false); }
+  else llmMsg('保存失败',true);
+});
+$('gearBtn').addEventListener('click',()=>$('drawer').classList.add('on'));
+$('drawerClose').addEventListener('click',()=>$('drawer').classList.remove('on'));
+
+/* ---------------- 键位配置 ---------------- */
+let kmEditing=0, kmDraft=null;
+function renderKmList(){
+  let h='';
+  for(let i=1;i<=8;i++){
+    const L=keyLabel(i);
+    h+=`<div class="kmrow ${L.kind==='action'?'act':''}" onclick="openKm(${i})">
+      <div class="kn">${i}</div><div class="kx">${esc(L.name)}</div>
+      <div class="kp">${esc(L.price||(L.kind==='action'?'动作':'默认'))}</div></div>`;
+  }
+  $('kmList').innerHTML=h;
+}
+function openKm(n){
+  kmEditing=n; kmDraft=null;
+  const km=(S.keymap||{})[String(n)];
+  $('kmTitle').textContent='配置按键 '+n+'（当前: '+(keyLabel(n).name)+'）';
+  let h=`<div class="kmrow ${!km?'on':''}" data-t="default">
+      <div class="kn" style="background:#8A7A6D">↺</div><div class="kx">恢复默认</div>
+      <div class="kp">${n===8?'确认这一单':'菜单前7主食第'+n+'位'}</div></div>`;
+  h+=`<div class="kmrow act ${km&&km.type==='action'&&km.action==='confirm'?'on':''}" data-t="action" data-a="confirm">
+      <div class="kn">✓</div><div class="kx">确认这一单</div><div class="kp">动作</div></div>`;
+  h+=`<div class="kmrow act ${km&&km.type==='action'&&km.action==='clear'?'on':''}" data-t="action" data-a="clear">
+      <div class="kn">✕</div><div class="kx">清空餐盘</div><div class="kp">动作</div></div>`;
+  const groups={};
+  CATALOG.forEach(c=>{ const g=c.cat||'其他'; (groups[g]=groups[g]||[]).push(c); });
+  h+='<div style="font-size:11px;font-weight:900;color:var(--dim);margin:12px 0 7px">绑定菜单餐品</div>';
+  for(const [g,list] of Object.entries(groups)){
+    h+=`<div style="font-size:10.5px;font-weight:800;color:var(--gold-d);margin:8px 0 5px">${esc(g)}</div>`;
+    h+=list.map(c=>`<div class="kmrow ${km&&km.type==='item'&&km.code===c.code?'on':''}" data-t="item" data-c="${esc(c.code)}">
+      <div class="kn">${c.role==='main'?'堡':c.role==='side'?'薯':c.role==='drink'?'饮':'·'}</div>
+      <div class="kx">${esc(c.name)}</div><div class="kp">¥${fmt(c.price)}</div></div>`).join('');
+  }
+  $('kmBody').innerHTML=h;
+  $('kmBody').querySelectorAll('.kmrow').forEach(r=>r.addEventListener('click',()=>{
+    $('kmBody').querySelectorAll('.kmrow').forEach(x=>x.classList.remove('on'));
+    r.classList.add('on');
+    kmDraft={t:r.dataset.t,a:r.dataset.a,c:r.dataset.c};
+  }));
+  $('kmModal').classList.add('on');
+}
+$('kmClose').addEventListener('click',()=>$('kmModal').classList.remove('on'));
+$('kmModal').addEventListener('click',e=>{ if(e.target===$('kmModal'))$('kmModal').classList.remove('on'); });
+$('kmReset').addEventListener('click',()=>{
+  kmDraft={t:'default'};
+  $('kmBody').querySelectorAll('.kmrow').forEach(x=>x.classList.remove('on'));
+  $('kmBody').querySelector('.kmrow').classList.add('on');
+});
+$('kmSave').addEventListener('click',async()=>{
+  if(!kmDraft){ $('kmModal').classList.remove('on'); return; }
+  const km={...(S.keymap||{})};
+  const k=String(kmEditing);
+  if(kmDraft.t==='default') delete km[k];
+  else if(kmDraft.t==='action') km[k]={type:'action',action:kmDraft.a};
+  else km[k]={type:'item',code:kmDraft.c};
+  const r=await post('/api/keymap',{keymap:km});
+  if(r.ok){ S.keymap=r.keymap; renderKeys(); renderKmList(); }
+  $('kmModal').classList.remove('on');
+});
+
+/* ---------------- 硬件镜像: 默认收起, 点击展开 ---------------- */
+$('hwFab').addEventListener('click',()=>{
+  const p=$('hwPanel'); p.classList.toggle('on');
+  const on=p.classList.contains('on');
+  $('hwFab').title=on?'收起硬件镜像':'展开硬件镜像';
+  $('hwFab').querySelector('small').textContent=on?'收起':'硬件镜像';
+});
+
+/* ---------------- 语音 ---------------- */
+let voiceBusy=false;
+function voiceDown(){
+  if(voiceBusy)return; voiceBusy=true;
+  $('vlayer').classList.add('on'); $('ttwrap').classList.add('voice');
+  $('voicePill').style.display=''; $('voicePill').classList.add('voice');
+  $('voiceTxt').textContent='我在听...';
+  post('/api/voice',{state:'down'});
+}
+function voiceUp(cmd){
+  if(!voiceBusy)return; voiceBusy=false;
+  $('vlayer').classList.remove('on'); $('ttwrap').classList.remove('voice');
+  $('voicePill').classList.remove('voice');
+  $('voiceTxt').textContent='语音待命';
+  post('/api/voice',{state:'up'});
+  if(cmd){ $('vsub').textContent='试试说: 帮我配一桌两人六十块的'; }
+}
+/* 短按 = 演示一轮完整语音指令 */
+function tapVoice(){
+  voiceDown();
+  $('vtitle').textContent='我在听...';
+  setTimeout(()=>{
+    $('vtitle').textContent='“帮我配一桌两人六十块的”';
+    $('vsub').textContent='收到, 正在让 AI 配单...';
+  },1300);
+  setTimeout(()=>{
+    voiceUp();
+    $('people').value=2; $('budget').value=60;
+    plan();
+  },2400);
+}
+
+/* ---------------- 唱机旋钮 ---------------- */
+const ttEl=$('ttwrap'), disc=$('ttDisc'), grooves=$('ttGrooves'), label=$('ttLabel');
+const STEP=42;
+let ang=0, vel=0, accum=0, dragging=false, lastA=0, moveDist=0, downT=0, holdTimer=null, holding=false;
+let actx=null;
+
+function tick(v){
+  try{
+    actx=actx||new (window.AudioContext||window.webkitAudioContext)();
+    const o=actx.createOscillator(), g=actx.createGain(), f=actx.createBiquadFilter();
+    f.type='bandpass'; f.frequency.value=1900; f.Q.value=1.4;
+    o.type='square'; o.frequency.value=1500;
+    g.gain.setValueAtTime(Math.max(.05,Math.min(.16,.14*v)),actx.currentTime);
+    g.gain.exponentialRampToValueAtTime(.0001,actx.currentTime+.045);
+    o.connect(f); f.connect(g); g.connect(actx.destination);
+    o.start(); o.stop(actx.currentTime+.05);
+  }catch(e){}
+}
+function flip(){
+  label.classList.remove('flip'); void label.offsetWidth; label.classList.add('flip');
+}
+function step(dir){
+  dial(dir);
+  flip();
+  tick(Math.min(1,Math.abs(vel)/16+.3));
+}
+function applySteps(){
+  let n=0;
+  while(accum>=STEP&&n<12){ step(1); accum-=STEP; n++; }
+  while(accum<=-STEP&&n<12){ step(-1); accum+=STEP; n++; }
+}
+function centerOf(el){ const r=el.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2}; }
+function angleOf(c,x,y){ return Math.atan2(y-c.y,x-c.x)*180/Math.PI; }
+
+ttEl.addEventListener('pointerdown',e=>{
+  e.preventDefault();
+  try{ttEl.setPointerCapture(e.pointerId);}catch(_){}
+  dragging=true; holding=false; moveDist=0; downT=performance.now(); vel=0;
+  lastA=angleOf(centerOf(ttEl),e.clientX,e.clientY);
+  clearTimeout(holdTimer);
+  holdTimer=setTimeout(()=>{ if(dragging&&moveDist<7){ holding=true; voiceDown(); $('vtitle').textContent='按住说话中...'; } },340);
+});
+ttEl.addEventListener('pointermove',e=>{
+  if(!dragging)return;
+  const a=angleOf(centerOf(ttEl),e.clientX,e.clientY);
+  let d=a-lastA; while(d>180)d-=360; while(d<-180)d+=360;
+  lastA=a; moveDist+=Math.abs(d);
+  if(moveDist>=7){ clearTimeout(holdTimer); holdTimer=null; }
+  ang+=d; vel=vel*.55+d*.45; accum+=d;
+  applySteps();
+});
+function endDrag(){
+  if(!dragging)return; dragging=false;
+  clearTimeout(holdTimer); holdTimer=null;
+  if(holding){ holding=false; voiceUp(); }
+  else if(moveDist<7&&performance.now()-downT<340){ tapVoice(); }
+}
+ttEl.addEventListener('pointerup',endDrag);
+ttEl.addEventListener('pointercancel',endDrag);
+ttEl.addEventListener('dblclick',e=>e.preventDefault());
+
+/* 惯性循环 */
+(function loop(){
+  if(!dragging&&Math.abs(vel)>.05){
+    ang+=vel; vel*=.945; accum+=vel;
+    applySteps();
+    if(Math.abs(vel)<.55) accum*=.88;
+  }
+  disc.style.transform='rotate('+ang.toFixed(2)+'deg)';
+  const spd=Math.min(1,Math.abs(vel)/14);
+  grooves.style.filter=spd>.07?'blur('+(spd*2.4).toFixed(2)+'px)':'none';
+  ttEl.classList.toggle('spinning',spd>.32);
+  updateHwPanel();
+  requestAnimationFrame(loop);
+})();
+
+/* 麦克风按钮: 按住 = PTT */
+const mic=$('micBtn');
+mic.addEventListener('pointerdown',e=>{e.preventDefault();voiceDown();$('vtitle').textContent='按住说话中...';});
+mic.addEventListener('pointerup',()=>voiceUp());
+mic.addEventListener('pointerleave',()=>voiceUp());
+mic.addEventListener('click',e=>e.preventDefault());
+
+/* ---------------- 状态渲染 ---------------- */
+let lastKmSig='';
+function render(s){
+  S=s;
+  const st=s.store||{};
+  $('conn').textContent='已连接';
+  $('connPill').classList.add('on');
+  if(st.storeName){
+    $('storePill').style.display='';
+    $('store').textContent=st.storeName;
+  }
+  if(!voiceBusy){
+    $('voicePill').style.display=s.voice?'':'none';
+    if(s.voice)$('voiceTxt').textContent='我在听...';
+  }
+
+  /* 唱机中心标 */
+  updateDisc(s.selected||'--');
+  syncMenuSelection(s.selected);
+  renderStrip();
+
+  /* 键位映射变化时刷新键帽与设置列表 */
+  const kmSig=JSON.stringify(s.keymap||{});
+  if(kmSig!==lastKmSig){ lastKmSig=kmSig; renderKeys(); renderKmList(); }
+
+  /* 餐盘 */
+  const cart=s.cart||[], box=$('cart');
+  if(!cart.length){ box.innerHTML='<div class="empty">餐盘是空的<br>按按键、转旋钮或点菜单都可以加菜</div>'; }
+  else{
+    box.innerHTML=cart.map(i=>`<div class="cr">
+      <div class="nm">${esc(i.name)}<small>单价 ¥${fmt(i.price)} · 小计 ¥${fmt(i.subtotal)}</small></div>
+      <div class="qty">
+        <button onclick="rm('${esc(i.code)}',1)">-</button><b>${i.qty}</b>
+        <button onclick="addCode('${esc(i.code)}')">+</button>
+      </div></div>`).join('');
+  }
+
+  /* 算价 */
+  const p=s.price||{};
+  const has=cart.length>0;
+  $('orig').textContent=has?fmt(p.original)+' 元':'--';
+  $('pay').textContent=has?fmt(p.payable)+' 元':'--';
+  $('disc').textContent=has?('省 '+fmt(p.discount)+' 元'):'--';
+  const bal=$('balance');
+  if(has&&p.balance>0&&p.next){
+    bal.style.display='flex';
+    $('balanceTxt').textContent='凑单提示: 再加 '+fmt(p.balance)+' 元, 可解锁「'+p.next+'」';
+  }else{ bal.style.display='none'; }
+  const n=(s.coupons||[]).length;
+  $('couponline').innerHTML=n?('本店可用优惠 <b>'+n+'</b> 张, 算价已自动取最优'):'当前时段暂无可用优惠券';
+
+  /* 日志 */
+  $('log').innerHTML=(s.log||[]).map(l=>
+    `<div><span class="t">${l.t}</span>${esc(l.text)}</div>`).join('')||'<div>暂无事件</div>';
+}
+
+async function refresh(){
+  try{ const r=await fetch('/api/state'); render(await r.json()); }catch(e){}
+}
+
+/* ---------------- 启动 ---------------- */
+buildHwKeys();
+loadConfig();          // 先拉配置(引擎/键位), 再拉菜单
+const es=new EventSource('/api/events');
+es.onmessage=e=>{ try{ render(JSON.parse(e.data)); }catch(_){} };
+es.onerror=()=>{ $('conn').textContent='连接断开'; $('connPill').classList.remove('on'); };
+refresh().then(loadMenu);
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.key>='1'&&e.key<='8'){
+    const b=document.querySelector('.k[data-key="'+e.key+'"]');
+    key(parseInt(e.key)); if(b)flashKey(b);
+  }
+  if(e.key==='ArrowLeft')dial(-1);
+  if(e.key==='ArrowRight')dial(1);
+  if(e.key==='Enter')addSel();
+});
+document.addEventListener('keyup',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.key>='1'&&e.key<='8')releaseHw(parseInt(e.key));
+});
+</script>
+</body>
+</html>
