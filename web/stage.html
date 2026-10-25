@@ -172,17 +172,20 @@ body{
     60% calc(100% - 9px),56% 100%,52% calc(100% - 9px),48% 100%,44% calc(100% - 9px),40% 100%,
     36% calc(100% - 9px),32% 100%,28% calc(100% - 9px),24% 100%,20% calc(100% - 9px),16% 100%,
     12% calc(100% - 9px),8% 100%,4% calc(100% - 9px),0 100%)}
-.receipt h4{font-size:13px;font-weight:800;text-align:center;letter-spacing:.16em;margin-bottom:9px}
-.receipt .rl{display:flex;justify-content:space-between;gap:8px;font-size:11.5px;padding:3px 0;
+.receipt h4{font-size:16px;font-weight:900;text-align:center;letter-spacing:.16em;margin-bottom:10px}
+.receipt .rl{display:flex;justify-content:space-between;gap:8px;font-size:14px;line-height:1.35;padding:5px 0;
   border-bottom:1px dashed rgba(36,28,22,.16)}
-.receipt .rl .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.receipt .rl .q{flex:none;font-size:10.5px;font-weight:800;color:#8B7B6C;
-  background:rgba(36,28,22,.06);border-radius:4px;padding:0 4px;margin-right:2px}
-.receipt .rl .v{font-weight:800;flex:none}
-.receipt .rt{display:flex;justify-content:space-between;font-size:13.5px;font-weight:900;
-  margin-top:9px;padding-top:7px;border-top:2px solid rgba(36,28,22,.75)}
+.receipt .rl .n{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.receipt .rl .q{flex:none;font-size:13px;font-weight:900;color:#6F5B4B;
+  background:rgba(36,28,22,.08);border-radius:4px;padding:1px 5px;margin-right:2px}
+.receipt .rl .v{font-weight:900;flex:none;font-size:13px}
+.receipt .rdiscount{display:flex;justify-content:space-between;font-size:14px;font-weight:900;color:var(--red);margin-top:9px;padding-top:7px;border-top:1px dashed rgba(36,28,22,.28)}
+.receipt .rt{display:flex;justify-content:space-between;font-size:17px;font-weight:900;
+  margin-top:7px;padding-top:8px;border-top:2px solid rgba(36,28,22,.75)}
 .receipt .rt .v{color:var(--red)}
-.receipt .rsub{text-align:center;font-size:9px;color:#8B7B6C;margin-top:7px;letter-spacing:.06em}
+.receipt .rsub{text-align:center;font-size:11px;color:#8B7B6C;margin-top:8px;letter-spacing:.04em}
+.receipt .real-order-btn{display:block;width:100%;margin-top:12px;padding:10px 12px;border:0;border-radius:8px;font-size:14px;font-weight:900;cursor:pointer}
+.receipt .real-order-btn:disabled{opacity:.55;cursor:not-allowed}
 .receipt .rvoid{text-align:center;font-size:11.5px;color:#9A8A7A;padding:10px 0}
 
 /* ---------------- AI 助手 ---------------- */
@@ -803,9 +806,12 @@ function renderTray(){
       cart.map(i=>`<div class="rl"><span class="n">${esc(i.name)}</span>`+
         `<span class="q">×${i.qty}</span>`+
         `<span class="v">¥${fmt(i.subtotal)}</span></div>`).join('')+
+      (p.discount>0?`<div class="rdiscount"><span>已优惠</span><span>-¥${fmt(p.discount)}</span></div>`:'')+
       `<div class="rt"><span>合计</span><span class="v">¥${fmt(p.payable)}</span></div>`+
-      (p.discount>0?`<div class="rsub">已优惠 ¥${fmt(p.discount)}</div>`:'')+
-      `<div class="rsub">价格来自麦当劳 MCP 实时核价</div>`;
+      `<div class="rsub">价格来自麦当劳 MCP 实时核价</div>`+
+      `<button class="gold real-order-btn" id="realOrderBtn">确认并真实下单</button>`;
+    const realBtn=$('realOrderBtn');
+    if(realBtn) realBtn.onclick=realOrder;
   }
 
   const n=cart.reduce((s,i)=>s+i.qty,0);
@@ -921,13 +927,34 @@ document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
 });
 $('cartBtn').onclick=()=>{ window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); };
 function confirmOrder(){
-  if(!(STATE.cart||[]).length) return;
-  post('/api/key',{key:8}).then(r=>{
-    const p=(r&&r.price)||STATE.price||{};
+  if(!(STATE.cart||[]).length){ say('餐盘为空'); return; }
+  const p=STATE.price||{};
+  const ok=window.confirm(`即将通过麦当劳官方 MCP 创建真实到店订单。\n\n门店：${STATE.store||'当前门店'}\n应付：¥${fmt(p.payable)}\n\n这不会自动支付，但可能生成待支付订单。确认继续？`);
+  if(ok) realOrder();
+}
+async function realOrder(){
+  if(window.__realOrderBusy) return;
+  if(!(STATE.cart||[]).length){ say('餐盘为空'); return; }
+  const btn=$('realOrderBtn');
+  window.__realOrderBusy=true;
+  if(btn){ btn.disabled=true; btn.textContent='正在创建真实订单…'; }
+  $('msg').className='msg'; $('msg').textContent='正在通过麦当劳 MCP 创建真实订单…';
+  try{
+    const r=await post('/api/create-order',{confirmed:true,needTableware:false});
+    if(!r||r.error) throw new Error((r&&r.error)||'创建订单失败');
+    const o=r.order||{};
+    const id=o.orderId||o.orderNo||'已提交';
     $('msg').className='msg ok';
-    $('msg').textContent=`订单已确认 · 应付 ¥${fmt(p.payable)}`+(p.discount>0?` · 省 ¥${fmt(p.discount)}`:'');
+    $('msg').textContent=`真实订单已创建 · ${id}`+(o.payH5Url?' · 请打开支付链接完成支付':'');
+    if(o.payH5Url) window.open(o.payH5Url,'_blank','noopener');
+    ORDERS=null;
+  }catch(e){
+    $('msg').className='msg err'; $('msg').textContent='真实下单失败：'+e.message;
+  }finally{
+    window.__realOrderBusy=false;
+    if(btn){ btn.disabled=false; btn.textContent='确认并真实下单'; }
     poll();
-  });
+  }
 }
 $('btnConfirm').onclick=openOrders;
 $('btnClear').onclick=()=>{

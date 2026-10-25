@@ -350,6 +350,7 @@ class Bridge:
                     "discount": pr.get("discount", 0.0),
                     "balance": pr.get("balance", 0.0),
                     "next": pr.get("next_discount"),
+                    "takeWayCode": pr.get("takeWayCode", ""),
                 },
                 "log": self.log[-12:],
                 "voice": self.voice_active,
@@ -590,15 +591,52 @@ class Bridge:
                 "storeCode": self.store_code,
                 "orderType": 1, "beType": 1, "items": items,
             })
+            takeways = data.get("takeWayList") or data.get("takewayList") or []
+            take_way_code = ""
+            if takeways and isinstance(takeways[0], dict):
+                take_way_code = str(takeways[0].get("code") or takeways[0].get("takeWayCode") or "")
             self.price_result = {
                 "original": mcd.fen(data.get("originalPrice") or data.get("productOriginalPrice")),
                 "payable": mcd.fen(data.get("price") or data.get("productPrice")),
                 "discount": mcd.fen(data.get("discount")),
                 "balance": mcd.fen((data.get("enjoyable") or {}).get("balance")),
                 "next_discount": _fmt_next(data.get("enjoyable")),
+                "takeWayCode": take_way_code,
             }
         except Exception as e:
             self.push_log(f"算价失败: {e}")
+
+    def create_real_order(self, need_tableware=False):
+        """通过麦当劳 MCP 创建真实到店自取订单（不会自动支付）。"""
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        with self.lock:
+            if not self.cart:
+                return {"error": "餐盘为空"}
+            items = [{"productCode": code, "quantity": int(entry.get("qty", 1))}
+                     for code, entry in self.cart.items()]
+            price = dict(self.price_result or {})
+        try:
+            # 下单前强制重新算价，避免使用过期价格或取餐方式。
+            self.recalc()
+            price = dict(self.price_result or price)
+            take_way = str(price.get("takeWayCode") or "")
+            if not take_way:
+                return {"error": "未获取到到店取餐方式，请先刷新菜单并重新算价"}
+            args = {
+                "storeCode": self.store_code,
+                "orderType": 1,
+                "beType": 1,
+                "takeWayCode": take_way,
+                "items": items,
+                "needTableware": bool(need_tableware),
+            }
+            data = mcd.call("create-order", args) or {}
+            self.push_log(f"已创建真实订单: {data.get('orderId', '已提交')}")
+            return {"success": True, "order": data, "price": price}
+        except Exception as e:
+            self.push_log(f"真实下单失败: {e}")
+            return {"error": _short_err(e)}
 
     # ------------------------------------------------ 操作
     def add(self, code=None, qty=1):
@@ -1259,6 +1297,14 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/reorder":
             # 历史订单一键再来: 按餐品名匹配当前门店菜单后放回餐盘
             self._json(BRIDGE.reorder(b.get("orderId", "")))
+            return
+
+        if path == "/api/create-order":
+            # 真实下单：前端必须先完成二次确认；接口不会自动支付。
+            if not b.get("confirmed"):
+                self._json({"error": "需要确认后才能创建真实订单"}, 400)
+                return
+            self._json(BRIDGE.create_real_order(bool(b.get("needTableware", False))))
             return
 
         if path == "/api/coupons/bind":
