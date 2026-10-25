@@ -1182,7 +1182,11 @@ $('gearBtn').onclick=openSettings; $('setClose').onclick=closeSettings; $('setMa
 async function loadSettings(){
   const d=await (await fetch('/api/config')).json(); SETCFG=d||{};
   const l=d.llm||{}; $('setBase').value=l.base||''; $('setKey').value=l.key||''; $('setModel').value=l.model||'';
-  $('setEngineNow').textContent=d.engine==='llm'?'当前：大模型':'当前：本地算法';
+  const isLlm=d.engine==='llm';
+  ENGINE=isLlm?'llm':'local';
+  $('setEngineNow').textContent=isLlm?'当前：大模型':'当前：本地算法';
+  $('setLocal').classList.toggle('gold',!isLlm);
+  $('setLlm').classList.toggle('gold',isLlm);
   renderSetKeymap(d.keymap||{});
 }
 function renderSetKeymap(km){
@@ -1194,8 +1198,9 @@ function renderSetKeymap(km){
   }).join('');
 }
 function setMsg(t,err){$('setMsg').textContent=t;$('setMsg').classList.toggle('err',!!err)}
-$('setLocal').onclick=()=>{ post('/api/llm-config',{enabled:false}).then(()=>{setMsg('已切换本地算法');loadSettings()}) };
-$('setTest').onclick=async()=>{ setMsg('测试中…'); await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); const r=await post('/api/llm-config',{test:true}); setMsg(r.ok?'连接成功：'+(r.msg||''):'失败：'+(r.msg||''),!r.ok); };
+$('setLocal').onclick=()=>{ post('/api/llm-config',{enabled:false}).then(()=>{ENGINE='local';setMsg('已切换本地算法');loadSettings()}) };
+$('setLlm').onclick=()=>{ post('/api/llm-config',{enabled:true,base:$('setBase').value,key:$('setKey').value,model:$('setModel').value}).then(()=>{ENGINE='llm';setMsg('已启用大模型');loadSettings()}) };
+$('setTest').onclick=async()=>{ setMsg('测试中…'); await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); const r=await post('/api/llm-config',{test:true}); setMsg(r.ok?'连接成功：'+(r.msg||''):'失败：'+(r.msg||''),!r.ok); loadSettings(); };
 $('setSave').onclick=async()=>{ const r=await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); setMsg(r.ok?'已保存并启用':'保存失败',!r.ok); if(r.ok)loadSettings(); };
 
 /* ---------------- 小智语音 ----------------

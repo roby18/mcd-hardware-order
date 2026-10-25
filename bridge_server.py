@@ -1315,7 +1315,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json(BRIDGE.reorder(b.get("orderId", "")))
             return
 
-        if path == "/api/create-order":
+        if path in ("/api/create-order", "/api/order/create"):
             # 真实下单：前端必须先完成二次确认；接口不会自动支付。
             if not b.get("confirmed"):
                 self._json({"error": "需要确认后才能创建真实订单"}, 400)
