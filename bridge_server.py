@@ -71,6 +71,74 @@ WEB_DIR = os.path.join(HERE, "web")
 IMG_DIR = os.path.join(WEB_DIR, "img")
 os.makedirs(IMG_DIR, exist_ok=True)
 
+
+# ---------------------------------------------------------------- 文件日志
+def _log_dir():
+    """统一日志目录: 优先项目根 logs/ (与 start-all.bat / tail-log.bat 约定一致),
+    根目录不可写时退回本目录 logs/。"""
+    for cand in (os.path.join(HERE, "..", "..", "logs"), os.path.join(HERE, "logs")):
+        try:
+            os.makedirs(cand, exist_ok=True)
+            probe = os.path.join(cand, ".w")
+            with open(probe, "w", encoding="utf-8") as f:
+                f.write("ok")
+            os.remove(probe)
+            return os.path.abspath(cand)
+        except Exception:
+            continue
+    return None
+
+
+LOG_DIR = _log_dir()
+BRIDGE_LOG = os.path.join(LOG_DIR, "bridge.log") if LOG_DIR else None
+LOG_MAX_BYTES = 5 * 1024 * 1024          # 单文件超过 5MB 滚动一个 .1
+
+
+class _Tee:
+    """把 print 同时写到控制台和日志文件(带时间戳), 方便 tail -f 观察。"""
+
+    def __init__(self, stream, path):
+        self.stream = stream
+        self.path = path
+
+    def write(self, text):
+        try:
+            self.stream.write(text)
+        except Exception:
+            pass
+        if not text or not self.path:
+            return
+        try:
+            if os.path.exists(self.path) and os.path.getsize(self.path) > LOG_MAX_BYTES:
+                os.replace(self.path, self.path + ".1")
+            with open(self.path, "a", encoding="utf-8") as f:
+                for line in text.splitlines():
+                    if line.strip():
+                        f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} {line}\n")
+        except Exception:
+            pass
+
+    def flush(self):
+        try:
+            self.stream.flush()
+        except Exception:
+            pass
+
+
+def setup_file_log(tag="bridge"):
+    """把 stdout/stderr 双写到日志文件; 返回日志路径(失败返回 None)。"""
+    if not BRIDGE_LOG:
+        return None
+    try:
+        with open(BRIDGE_LOG, "a", encoding="utf-8") as f:
+            f.write(f"\n===== {tag} 启动 {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n")
+        sys.stdout = _Tee(sys.__stdout__, BRIDGE_LOG)
+        sys.stderr = _Tee(sys.__stderr__, BRIDGE_LOG)
+        return BRIDGE_LOG
+    except Exception:
+        return None
+
+
 DEFAULT_STORE = "1400038"          # 麦当劳广州英雄广场餐厅
 DEFAULT_CITY = "广州"
 DEFAULT_KEYWORD = "中山大学"
@@ -364,6 +432,11 @@ class Bridge:
             self.log.append({"t": time.strftime("%H:%M:%S"), "text": text})
             if len(self.log) > 60:
                 self.log = self.log[-60:]
+        # 同步落到日志文件(tail -f 可实时看演示流程: 加菜/算价/下单)
+        try:
+            print(f"[事件] {text}", file=sys.stderr, flush=True)
+        except Exception:
+            pass
 
     def voice(self, state="down"):
         """旋钮按下/松开: 语音交互(PTT)状态。"""
@@ -1403,6 +1476,10 @@ def main():
     ap.add_argument("--keyword", default=DEFAULT_KEYWORD)
     ap.add_argument("--no-menu", action="store_true", help="启动时不预加载菜单")
     a = ap.parse_args()
+
+    log_path = setup_file_log("bridge")
+    if log_path:
+        print(f"[bridge] 日志文件: {log_path}", file=sys.stderr)
 
     BRIDGE.store_code = a.store
     if not a.no_menu and mcd is not None:

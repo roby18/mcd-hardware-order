@@ -148,6 +148,37 @@ python mcp_pipe.py --endpoint wss://...  # 语音链路（可选）
 
 > 注意：小智 hub 必须用 `xiaozhi-mcp-hub\.venv` 里的 Python 跑，系统 Python 缺 `mcp/websockets/httpx` 会直接起不来。
 
+### 4. 日志与链路体检（判断小智是否连上）
+
+所有服务输出统一落在最外层 `logs/` 目录，文件名固定，可直接 `tail -f`：
+
+| 文件 | 内容 |
+|------|------|
+| `logs\bridge.log` | 点餐台：启动、菜单加载、算价、加菜/删菜、下单、大模型调用（带时间戳） |
+| `logs\xiaozhi-hub.log` | 小智链路：supervise 看护状态 + mcp_pipe 连接日志 + hub 的 MCP 调用明细 |
+
+```bat
+tail-log.bat     # 实时跟踪全部日志（Ctrl+C 退出，不影响服务）
+check-link.bat   # 一键体检：bridge 端口/API、链路进程、接入点凭证、连接状态，直接给结论
+```
+
+命令行方式（Git Bash）：
+
+```bash
+tail -f logs/bridge.log logs/xiaozhi-hub.log
+```
+
+**判断小智连接成功的标志**（在 `logs\xiaozhi-hub.log` 里）：
+
+```text
+[hub.py] Connecting to WebSocket server...          ← 正在连
+[hub.py] Successfully connected to WebSocket server  ← 连上了（关键行）
+[hub.py] Started server process: ...hub.py           ← 本地 MCP 服务已拉起
+```
+
+出现 `Connection closed` / `连接失败` / supervise 的 `退出了` 说明掉线，supervise 会自动退避重连；
+持续掉线常见原因：接入点 token 失效或被顶号、网络不通、多个 supervise 抢同一接入点（先跑 `stop-all.bat` 再启动）。
+
 ## 目录结构
 
 ```
