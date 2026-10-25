@@ -25,6 +25,17 @@
 
 网页实时显示：餐盘、应付金额、已省多少、**还差多少钱能解锁下一档优惠**。
 
+## 参赛信息
+
+| 项 | 值 |
+|---|---|
+| 赛事 | WaytoAGI「1024 切磋大会」（用餐赛道 + 侦探赛道，两件独立作品共用本底座）；麦当劳程序员节创意开发大赛 |
+| 当前版本 | v1.13.1（见 `VERSION`） |
+| 开发工具 | 腾讯 WorkBuddy（开发对话记录见 `workbuddy.md`） |
+| 核心依赖 | 麦当劳官方 MCP（open.mcd.cn）、小智 MCP 接入点、腾讯云元宝 SearchPro |
+| 仓库文档 | `README.md`（本文件）、`作品说明.md`、`MCP_INTEGRATION.md`（MCP 集成说明）、`CONTEST_DECLARATION.md`（参赛声明）、`路演演示案例.md`（演示脚本）、`workbuddy.md`（开发对话记录） |
+| 演示录屏 | 见赛事提交材料（本地 `演示麦当劳硬件点餐.mp4`，约 290MB，不入库） |
+
 ## 唱片中心 = 菜品照片
 
 旋钮旋转时，黑胶中心（150px 金色描边圆窗）切换成对应餐品的**真实照片**，
@@ -184,15 +195,23 @@ tail -f logs/bridge.log logs/xiaozhi-hub.log
 ```
 hardware-order/
 ├── bridge_server.py    餐盘状态 + HTTP API + SSE 推送 + 麦当劳调用 + 图片预下载
-├── mcp_server.py       stdio MCP 服务（7 个工具）
+├── mcd_saver.py        麦当劳 MCP 客户端（菜单/算价/优惠券/下单/外送链路）
+├── mcp_server.py       stdio MCP 服务（8 个工具，转调本服务 HTTP API）
 ├── mcp_pipe.py         接小智 MCP 接入点的 WebSocket 桥接器
 ├── start.bat           一键启动（bridge + 小智 MCP 链路）
 ├── start_voice.bat     单独起/重启小智语音链路
 ├── web/index.html      点餐台网页（单文件，无构建：唱机旋钮 + 照片窗 + 邻近条 + 硬件镜像折叠钮 + 可改按键帽 + 设置抽屉 + 菜单 + 餐盘）
-├── web/detective.html  侦探赛道作品页（三轮递进搜索 + 证据链）
+├── web/stage.html      下单舞台页（自取/外送弹窗 + 实时核价预览）
+├── web/detective.html  侦探赛道作品页（五轮递进搜索 + 证据链）
 ├── web/img/            菜品照片本地缓存（启动时自动下载，89 张）
 ├── config/             运行期配置（llm.json 含 Key 已 gitignore；keymap.json 键位映射）
-└── README.md
+├── VERSION             当前版本号（经 /api/config 下发前端）
+├── README.md           本文件
+├── 作品说明.md         参赛作品说明（WaytoAGI 1024 提交版）
+├── MCP_INTEGRATION.md  麦当劳 MCP 集成说明（10 个 Tool 的调用流程）
+├── CONTEST_DECLARATION.md  参赛声明（原创性/合规/信息安全）
+├── 路演演示案例.md     现场演示脚本与台词
+└── workbuddy.md        WorkBuddy 开发对话记录（参赛核验用）
 ```
 
 ## MCP 工具清单
@@ -206,6 +225,7 @@ hardware-order/
 | `mcd_clear` | 清空餐盘 |
 | `mcd_key` | 模拟按下硬件 1-8 号键 |
 | `mcd_menu` | 查看当前在售菜单 |
+| `yb_search` | 联网搜索真实信息（元宝 SearchPro，带来源链接；侦探赛道同款能力） |
 
 ## HTTP API
 
@@ -214,33 +234,43 @@ hardware-order/
 | GET | `/api/state` | 当前餐盘与算价快照 |
 | GET | `/api/events` | SSE 实时推送 |
 | GET | `/api/menu` | 菜单与可领券（含 `image` 远程图与 `localImg` 本地路径） |
-| GET | `/img/<商品码>.png` | 菜品照片本地缓存 |
+| GET | `/api/orders` | 我的历史订单（MCP 真实数据） |
+| GET | `/api/coupons` | 卡包优惠券 |
+| GET | `/api/order?orderId=` | 订单详情（外送单含地址/收货人/电话） |
 | POST | `/api/key` | `{"key": 1-8}` 按键 |
 | POST | `/api/dial` | `{"delta": ±1}` 旋钮 |
 | POST | `/api/voice` | `{"state":"down"/"up"}` 旋钮按下（语音 PTT 状态） |
 | POST | `/api/add` | `{"code": "...", "qty": 1}` 加菜 |
 | POST | `/api/remove` | 减菜 |
 | POST | `/api/clear` | 清空 |
+| POST | `/api/reorder` | 跨门店一键复购历史订单 |
 | POST | `/api/plan` | `{"people":2,"budget":60,"avoid":"","engine":"local"/"llm"}` AI 配单 |
 | POST | `/api/reload` | `{"city":"广州","keyword":"中山大学"}` 重新定位门店 |
-| GET | `/api/config` | 配置下发：大模型（key 脱敏）+ 按键映射 |
+| GET | `/api/config` | 配置下发：大模型（key 脱敏）+ 按键映射 + 版本号 |
 | POST | `/api/llm-config` | 保存大模型配置；`{"test":true}` 测连通 |
 | POST | `/api/keymap` | 保存 8 键映射 `{"keymap":{"1":{"type":"item","code":"5022"}}}` |
+| POST | `/api/select` | 选中指定餐品（旋钮联动） |
+| POST | `/api/order-preview` | 下单前预览：自取/外送 + 地址 + 实时核价（含配送费） |
+| POST | `/api/create-order` | 确认下单（`orderType` 1 自取 / 2 外送，外送带 `addressId`） |
+| POST | `/api/coupons/bind` | 一键领取可用券（用户显式确认后） |
+| POST | `/api/yb` | 侦探赛道：元宝 SearchPro 五轮递进搜索 |
+| POST | `/api/say` | 语音播报文本（TTS） |
 
-## 硬件接线（ESP32 侧，待接入）
+## 硬件接入（ESP32 侧，已联调）
 
-当前网页已提供虚拟按键与旋钮，硬件不是演示的必要条件。
-接入时把按键事件 POST 到 `/api/key` 即可：
+硬件是这套系统的主输入，不是可选项。ESP32 开发板（8 按键 + 1 旋钮）连接家庭 Wi-Fi 后，
+把按键与旋钮事件 POST 到本服务即可，固件侧只依赖标准 HTTP：
 
 ```
-S1-S7 -> POST /api/key {"key": 1..7}
-S8    -> POST /api/key {"key": 8}
-旋钮A/B 旋转 -> POST /api/dial {"delta": +1 / -1}
-旋钮按下     -> POST /api/voice {"state":"down"}（松开时 up）
+S1-S7 短按     -> POST /api/key {"key": 1..7}     加入键帽标注餐品
+S8 短按        -> POST /api/key {"key": 8}        确认这一单（弹下单类型选择）
+旋钮 A/B 旋转  -> POST /api/dial {"delta": +1/-1} 浏览菜单（网页唱片机同步）
+旋钮按下/松开  -> POST /api/voice {"state":"down"/"up"}  PTT 语音点餐
 ```
 
 网页上 1-7 键帽显示的真实餐品名，是按当前菜单前 7 个主食自动推导的，
 和硬件按键映射完全一致——菜单随时段变化，标签自动跟着变。
+硬件不在手边时，键盘 `←` `→` `回车` `1`-`8` 完全等价，可独立演示整套链路。
 
 ## 关键设计
 
@@ -276,6 +306,7 @@ SSE 走标准 HTTP，零依赖、穿透性好，单向推送正好满足"实时�
 
 ## 边界
 
-- 只算价，不下单、不自动领券。
+- 下单类操作（领券 / 创建订单）**只在用户显式确认后调用**，返回值不含完整支付链接。
+- 支持到店自取与外送两种真实下单（`create-order`，外送含地址选择与配送费核价）。
 - 价格与优惠以麦当劳官方实时结果为准。
 - 参赛作品，非麦当劳官方产品。
