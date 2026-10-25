@@ -249,7 +249,7 @@ body{
   50%{box-shadow:0 0 0 10px rgba(218,41,28,0)}}
 
 /* 语音浮层 */
-.vlayer{position:fixed;inset:0;background:rgba(6,4,3,.72);backdrop-filter:blur(10px);
+.vlayer{display:none;position:fixed;inset:0;background:rgba(6,4,3,.72);backdrop-filter:blur(10px);
   -webkit-backdrop-filter:blur(10px);display:none;align-items:center;justify-content:center;z-index:90}
 .vlayer.on{display:flex}
 .vbox{background:linear-gradient(170deg,rgba(255,199,44,.14),rgba(30,25,21,.96));
@@ -408,11 +408,6 @@ body{
       <div class="ttl">今日菜单</div>
     </div>
     <nav class="tabs" id="tabs"></nav>
-    <button class="icobtn" id="micBtn" title="按住说话（松开发送）">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-        <rect x="9" y="2.5" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0"/>
-        <path d="M12 17.5V21"/></svg>
-    </button>
     <button class="cartbtn" id="cartBtn" title="餐盘">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M4 5h2l2.2 10.2a2 2 0 0 0 2 1.6h7.9a2 2 0 0 0 2-1.6L22 8H6.5"/>
@@ -547,14 +542,6 @@ body{
 </div>
 
 <!-- 语音浮层 -->
-<div class="vlayer" id="vlayer">
-  <div class="vbox">
-    <div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i></div>
-    <div class="t1" id="vtitle">我在听…</div>
-    <div class="t2" id="vsub">说完松手即发送</div>
-  </div>
-</div>
-
 <!-- 我的订单抽屉: 麦当劳 MCP 真实历史订单 -->
 <div class="odmask" id="odMask"></div>
 <aside class="odrawer" id="odDrawer">
@@ -1093,7 +1080,11 @@ async function toggleDetail(i,o){
   if((d.coupons||[]).length) h+='<div style="margin-top:4px">优惠券：'+
     d.coupons.map(c=>esc(c.name)+(c.amount>0?`（省 ¥${fmt(c.amount)}）`:'')).join('、')+'</div>';
   if(d.pickupCode) h+='<div>取餐码：<span class="cp">'+esc(d.pickupCode)+'</span></div>';
-  if(d.address) h+='<div>门店地址：'+esc(d.address)+'</div>';
+  if(d.deliveryAddress){
+    h+='<div>配送地址：'+esc(d.deliveryAddress)+'</div>';
+    if(d.deliveryName||d.deliveryPhone) h+='<div>收货人：'+esc(d.deliveryName||'')+
+      (d.deliveryPhone?' · '+esc(d.deliveryPhone):'')+'</div>';
+  }else if(d.address){ h+='<div>门店地址：'+esc(d.address)+'</div>'; }
   box.innerHTML=h;
 }
 
@@ -1207,44 +1198,10 @@ $('setLocal').onclick=()=>{ post('/api/llm-config',{enabled:false}).then(()=>{se
 $('setTest').onclick=async()=>{ setMsg('测试中…'); await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); const r=await post('/api/llm-config',{test:true}); setMsg(r.ok?'连接成功：'+(r.msg||''):'失败：'+(r.msg||''),!r.ok); };
 $('setSave').onclick=async()=>{ const r=await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); setMsg(r.ok?'已保存并启用':'保存失败',!r.ok); if(r.ok)loadSettings(); };
 
-/* ---------------- 语音 PTT ---------------- */
-let voiceBusy=false, speech=null, speechText='', speechSupported=false;
-const SpeechAPI=window.SpeechRecognition||window.webkitSpeechRecognition;
-if(SpeechAPI){
-  speechSupported=true; speech=new SpeechAPI(); speech.lang='zh-CN'; speech.interimResults=true; speech.continuous=false;
-  speech.onresult=e=>{
-    speechText=Array.from(e.results).map(r=>r[0].transcript).join('');
-    $('vsub').textContent='识别到：'+speechText;
-  };
-  speech.onerror=e=>{ $('vsub').textContent=e.error==='not-allowed'?'麦克风权限被拒绝':'语音识别失败：'+e.error; };
-}
-function voiceDown(){
-  if(voiceBusy) return; voiceBusy=true; speechText='';
-  $('vlayer').classList.add('on'); $('micBtn').classList.add('rec');
-  $('vtitle').textContent='我在听…';
-  $('vsub').textContent=speechSupported?'请直接说出你的点餐需求':'当前浏览器不支持语音识别，请使用 Chrome 或 Edge';
-  post('/api/voice',{state:'down'});
-  if(speechSupported){ try{ speech.start(); }catch(e){} }
-}
-function voiceUp(){
-  if(!voiceBusy) return; voiceBusy=false;
-  if(speechSupported){ try{ speech.stop(); }catch(e){} }
-  $('vlayer').classList.remove('on'); $('micBtn').classList.remove('rec');
-  post('/api/voice',{state:'up'});
-  if(speechText.trim()){
-    $('ask').value=speechText.trim();
-    setTimeout(()=>ask(),120);
-  }else if(!speechSupported){ say('语音识别不可用：请用 Chrome/Edge，并允许麦克风权限'); }
-}
-(function bindMic(){
-  const m=$('micBtn');
-  m.addEventListener('pointerdown',e=>{ e.preventDefault(); voiceDown(); });
-  m.addEventListener('pointerup',()=>voiceUp());
-  m.addEventListener('pointercancel',()=>voiceUp());
-  m.addEventListener('pointerleave',()=>{ if(voiceBusy) voiceUp(); });
-  m.addEventListener('click',e=>e.preventDefault());
-})();
-
+/* ---------------- 小智语音 ----------------
+ * 语音由硬件麦克风 -> 小智云端 ASR/LLM -> MCP 接入点处理。
+ * 页面不再调用电脑麦克风，也不伪造实时字幕；硬件链路状态由 mcp_pipe 窗口日志确认。
+ */
 /* ---------------- 官方膳食佐证 ---------------- */
 $('btnNutri').onclick=async()=>{
   const box=$('nutriBox'), cart=STATE.cart||[];

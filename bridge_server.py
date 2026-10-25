@@ -834,11 +834,27 @@ class Bridge:
                 "subs": [{"name": s.get("itemName", ""), "qty": int(s.get("itemQuantity") or 1)}
                          for s in (p.get("comboItemList") or [])],
             })
+        # 外送订单的收货地址字段在不同接口版本中名称略有差异，统一归一化给前端。
+        delivery = (d.get("deliveryAddress") or d.get("receiveAddress") or
+                    d.get("addressInfo") or d.get("userAddress") or {})
+        if isinstance(delivery, dict):
+            delivery_address = (delivery.get("fullAddress") or delivery.get("address") or
+                                delivery.get("detail") or delivery.get("addressDetail") or "")
+            delivery_name = delivery.get("name") or delivery.get("receiverName") or ""
+            delivery_phone = delivery.get("phone") or delivery.get("receiverPhone") or ""
+        else:
+            delivery_address = str(delivery or "")
+            delivery_name = delivery_phone = ""
+        if not delivery_address:
+            delivery_address = (d.get("deliveryAddressText") or d.get("address") or "")
         return {
             "orderId": d.get("orderId", order_id),
             "status": d.get("orderStatus", ""),
             "store": d.get("storeName", ""),
             "address": d.get("storeAddress", ""),
+            "deliveryAddress": delivery_address,
+            "deliveryName": delivery_name,
+            "deliveryPhone": delivery_phone,
             "time": d.get("createTime", ""),
             "takeWay": d.get("takeWay", ""),
             "pickupCode": d.get("pickupCode", ""),
