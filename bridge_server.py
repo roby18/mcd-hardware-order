@@ -72,6 +72,18 @@ IMG_DIR = os.path.join(WEB_DIR, "img")
 os.makedirs(IMG_DIR, exist_ok=True)
 
 
+def _read_version():
+    """界面版本号动态来源: 读仓库根 VERSION 文件, 避免前端写死。"""
+    try:
+        with open(os.path.join(HERE, "VERSION"), encoding="utf-8") as f:
+            return (f.read() or "").strip() or "0.0.0"
+    except Exception:
+        return "0.0.0"
+
+
+VERSION = _read_version()
+
+
 # ---------------------------------------------------------------- 文件日志
 def _log_dir():
     """统一日志目录: 优先项目根 logs/ (与 start-all.bat / tail-log.bat 约定一致),
@@ -168,6 +180,10 @@ class Bridge:
         self.menu_loaded = False
         self.menu_cached = False      # True = 当前用的是本地缓存菜单(门店打烊/接口异常)
         self.voice_active = False   # 旋钮按下: 语音交互中
+        # 外送链路缓存: 地址列表(60s) + 各外送门店菜单(5min)
+        self._addr_cache = []
+        self._addr_ts = 0.0
+        self._dmenu_cache = {}      # storeCode -> (catalog, ts)
         # 大模型备选引擎(OpenAI 兼容) + 按键映射, 持久化在 config/ 下
         self.llm = {
             "enabled": False,       # 是否启用大模型引擎(配单/建议)
@@ -424,6 +440,7 @@ class Bridge:
                 "voice": self.voice_active,
                 "keymap": dict(self.keymap),
                 "engine": "llm" if self.llm_ready() else "local",
+                "version": VERSION,
                 "ts": time.time(),
             }
 
@@ -679,17 +696,20 @@ class Bridge:
         except Exception as e:
             self.push_log(f"算价失败: {e}")
 
-    def create_real_order(self, need_tableware=False):
-        """通过麦当劳 MCP 创建真实到店自取订单（不会自动支付）。"""
+    def create_real_order(self, need_tableware=False, order_type=1, address_id=""):
+        """通过麦当劳 MCP 创建真实订单（不会自动支付）。
+        order_type=1 到店自取 / order_type=2 外送(需 address_id)。"""
         if mcd is None:
             return {"error": "mcd_saver 未加载"}
         with self.lock:
             if not self.cart:
                 return {"error": "餐盘为空"}
-            items = [{"productCode": code, "quantity": int(entry.get("qty", 1))}
-                     for code, entry in self.cart.items()]
             price = dict(self.price_result or {})
         try:
+            if int(order_type) == 2:
+                return self._create_delivery_order(address_id, need_tableware, price)
+            items = [{"productCode": code, "quantity": int(entry.get("qty", 1))}
+                     for code, entry in self.cart.items()]
             # 下单前强制重新算价，避免使用过期价格或取餐方式。
             self.recalc()
             price = dict(self.price_result or price)
@@ -705,11 +725,234 @@ class Bridge:
                 "needTableware": bool(need_tableware),
             }
             data = mcd.call("create-order", args) or {}
-            self.push_log(f"已创建真实订单: {data.get('orderId', '已提交')}")
-            return {"success": True, "order": data, "price": price}
+            self.push_log(f"已创建真实到店订单: {data.get('orderId', '已提交')}")
+            return {"success": True, "order": data, "price": price,
+                    "orderType": 1, "store": self.store_info}
         except Exception as e:
             self.push_log(f"真实下单失败: {e}")
             return {"error": _short_err(e)}
+
+    # ------------------------------------------------ 外送(麦当劳 MCP delivery-*)
+    def delivery_addresses(self):
+        """收货地址列表 (MCP delivery-query-addresses), 60s 缓存。"""
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        now = time.time()
+        with self.lock:
+            if self._addr_cache and now - self._addr_ts < 60:
+                return {"addresses": list(self._addr_cache)}
+        try:
+            data = mcd.call("delivery-query-addresses", {}) or {}
+        except Exception as e:
+            return {"error": _short_err(e)}
+        out = []
+        for a in (data.get("addresses") or []):
+            if not isinstance(a, dict):
+                continue
+            out.append({
+                "addressId": str(a.get("addressId") or ""),
+                "contactName": a.get("contactName") or a.get("name") or "",
+                "phone": a.get("phone") or a.get("mobilePhone") or "",
+                "fullAddress": a.get("fullAddress") or a.get("address") or "",
+                "isDefault": bool(a.get("isDefault") or a.get("defaultAddress")),
+            })
+        with self.lock:
+            self._addr_cache, self._addr_ts = out, now
+        return {"addresses": out}
+
+    def delivery_store(self, address_id):
+        """按收货地址查可外送门店 (MCP delivery-query-stores), 取第一家营业中门店。"""
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        address_id = str(address_id or "").strip()
+        if not address_id:
+            return {"error": "缺少 addressId"}
+        try:
+            data = mcd.call("delivery-query-stores",
+                            {"addressId": address_id, "beType": 2}) or {}
+        except Exception as e:
+            return {"error": _short_err(e)}
+        stores = data if isinstance(data, list) else (data.get("stores") or [])
+        picked = None
+        for s in stores:
+            if isinstance(s, dict) and s.get("businessStatus"):
+                picked = s
+                break
+        if picked is None and stores and isinstance(stores[0], dict):
+            picked = stores[0]
+        if picked is None:
+            return {"error": "该地址附近没有可外送的门店"}
+        return {"store": {
+            "storeCode": str(picked.get("storeCode") or ""),
+            "beCode": str(picked.get("beCode") or ""),
+            "storeName": picked.get("storeName") or "",
+            "address": picked.get("address") or "",
+        }}
+
+    def _delivery_catalog(self, store_code, be_code):
+        """外送门店菜单 (query-meals orderType=2/beType=2/beCode)。
+        实测返回的 meals 是扁平 dict(key=商品码), 摊平成 catalog 结构, 按门店缓存 5 分钟。
+        出错时返回 {"error": ...}(调用方需判 isinstance(res, dict) and res.get("error"))。"""
+        key = str(store_code)
+        now = time.time()
+        with self.lock:
+            hit = self._dmenu_cache.get(key)
+            if hit and now - hit[1] < 300:
+                return hit[0]
+        try:
+            data = mcd.call("query-meals", {
+                "storeCode": key, "orderType": 2, "beType": 2,
+                "beCode": str(be_code or ""),
+            }) or {}
+        except Exception as e:
+            return {"error": _short_err(e)}
+        meals = data.get("meals") if isinstance(data, dict) else data
+        pairs = []
+        if isinstance(meals, dict):
+            pairs = list(meals.items())
+        elif isinstance(meals, list):
+            pairs = [(m.get("productCode") or m.get("code"), m)
+                     for m in meals if isinstance(m, dict)]
+        cat = []
+        for code, m in pairs:
+            if not code or not isinstance(m, dict):
+                continue
+            cat.append({
+                "code": str(code),
+                "name": m.get("name") or "",
+                "price": _money(m.get("currentPrice")),
+                "original": _money(m.get("originalPrice")),
+                "image": m.get("image") or "",
+                "role": "other", "cat": "外送",
+            })
+        with self.lock:
+            self._dmenu_cache[key] = (cat, now)
+        return cat
+
+    def match_delivery(self, name, dcat):
+        """把餐盘餐品名匹配到外送门店菜单: 归一化精确 -> 核心词包含, 取重合最多。
+        算法与 match_by_name(957-981 行)一致, 只是匹配对象换成传入的 dcat。"""
+        q = _norm_name(name)
+        if not q:
+            return None
+        for c in dcat:
+            if _norm_name(c.get("name", "")) == q:
+                return c
+        qc = _core_name(q)
+        best, best_score = None, 0
+        for c in dcat:
+            n = _norm_name(c.get("name", ""))
+            nc = _core_name(n)
+            score = 0
+            if qc and nc and (qc in nc or nc in qc):
+                score = min(len(qc), len(nc)) + 1
+            elif q and n and (q in n or n in q):
+                score = min(len(q), len(n))
+            if score > best_score:
+                best_score, best = score, c
+        return best if best_score >= 2 else None
+
+    def order_preview(self, order_type=1, address_id=""):
+        """下单前预览: 到店(当前门店算价) / 外送(按地址选门店+同名换码+含配送费算价)。
+        供前端弹窗实时展示, 不产生真实订单。"""
+        if mcd is None:
+            return {"error": "mcd_saver 未加载"}
+        with self.lock:
+            if not self.cart:
+                return {"error": "餐盘为空"}
+        if int(order_type) != 2:
+            return {"success": True, "orderType": 1,
+                    "store": self.store_info,
+                    "price": self.price_result or {},
+                    "missing": []}
+        addr = self.delivery_addresses()
+        if addr.get("error"):
+            return addr
+        addresses = addr.get("addresses") or []
+        if not addresses:
+            return {"error": "账号里还没有收货地址, 请先在麦当劳 APP 添加"}
+        picked = None
+        for a in addresses:
+            if str(a.get("addressId")) == str(address_id or ""):
+                picked = a
+                break
+        if picked is None:
+            for a in addresses:
+                if a.get("isDefault"):
+                    picked = a
+                    break
+        if picked is None:
+            picked = addresses[0]
+        st = self.delivery_store(picked["addressId"])
+        if st.get("error"):
+            return st
+        store = st["store"]
+        dcat = self._delivery_catalog(store["storeCode"], store.get("beCode", ""))
+        if isinstance(dcat, dict) and dcat.get("error"):
+            return dcat
+        items, missing = [], []
+        with self.lock:
+            for code, e in self.cart.items():
+                hit = self.match_delivery(e["item"].get("name", ""), dcat)
+                if hit:
+                    items.append({"productCode": hit["code"],
+                                  "quantity": int(e.get("qty", 1))})
+                else:
+                    missing.append(e["item"].get("name", code))
+        if not items:
+            return {"error": "外送门店没有可售的对应餐品: " + "、".join(missing[:5])}
+        try:
+            data = mcd.call("calculate-price", {
+                "storeCode": store["storeCode"], "orderType": 2, "beType": 2,
+                "beCode": store.get("beCode", ""), "addressId": picked["addressId"],
+                "items": items,
+            }) or {}
+        except Exception as e:
+            return {"error": "外送算价失败: " + _short_err(e)}
+        price = {
+            "original": mcd.fen(data.get("originalPrice") or data.get("productOriginalPrice")),
+            "payable": mcd.fen(data.get("price") or data.get("productPrice")),
+            "discount": mcd.fen(data.get("discount")),
+            "deliveryFee": mcd.fen(data.get("deliveryPrice") or data.get("realDeliveryPrice")
+                                   or data.get("deliveryFee")),
+            "balance": mcd.fen((data.get("enjoyable") or {}).get("balance")),
+        }
+        return {"success": True, "orderType": 2, "store": store,
+                "address": picked, "addresses": addresses,
+                "price": price, "missing": missing}
+
+    def _create_delivery_order(self, address_id, need_tableware, price):
+        """外送真实下单: 复用 order_preview 选门店/换码/算价, 再 create-order(orderType=2)。"""
+        prev = self.order_preview(2, address_id)
+        if prev.get("error"):
+            return prev
+        store = prev["store"]
+        addr = prev["address"]
+        dcat = self._delivery_catalog(store["storeCode"], store.get("beCode", ""))
+        items = []
+        with self.lock:
+            for code, e in self.cart.items():
+                hit = self.match_delivery(e["item"].get("name", ""), dcat)
+                if hit:
+                    items.append({"productCode": hit["code"],
+                                  "quantity": int(e.get("qty", 1))})
+        if not items:
+            return {"error": "外送门店无可售商品"}
+        args = {
+            "storeCode": store["storeCode"],
+            "orderType": 2, "beType": 2,
+            "beCode": store.get("beCode", ""),
+            "addressId": addr["addressId"],
+            "items": items,
+            "needTableware": bool(need_tableware),
+        }
+        data = mcd.call("create-order", args) or {}
+        self.push_log(f"已创建真实外送订单: {data.get('orderId', '已提交')} · "
+                      f"{store.get('storeName', '')}")
+        return {"success": True, "order": data,
+                "price": prev.get("price") or price,
+                "orderType": 2, "store": store, "address": addr,
+                "missing": prev.get("missing") or []}
 
     # ------------------------------------------------ 操作
     def add(self, code=None, qty=1):
@@ -1266,7 +1509,8 @@ class Handler(BaseHTTPRequestHandler):
             llm = dict(BRIDGE.llm)
             llm["key"] = ("***" + llm["key"][-4:]) if llm.get("key") else ""
             self._json({"llm": llm, "keymap": BRIDGE.keymap,
-                        "engine": "llm" if BRIDGE.llm_ready() else "local"})
+                        "engine": "llm" if BRIDGE.llm_ready() else "local",
+                        "version": VERSION})
             return
 
         if path == "/api/menu":
@@ -1392,7 +1636,16 @@ class Handler(BaseHTTPRequestHandler):
             if not b.get("confirmed"):
                 self._json({"error": "需要确认后才能创建真实订单"}, 400)
                 return
-            self._json(BRIDGE.create_real_order(bool(b.get("needTableware", False))))
+            self._json(BRIDGE.create_real_order(
+                bool(b.get("needTableware", False)),
+                int(b.get("orderType", 1) or 1),
+                str(b.get("addressId", "") or "")))
+            return
+
+        if path == "/api/order-preview":
+            # 下单前预览: 到店(当前门店算价) / 外送(按地址选门店+同名换码+含配送费算价)
+            self._json(BRIDGE.order_preview(int(b.get("orderType", 1) or 1),
+                                            str(b.get("addressId", "") or "")))
             return
 
         if path == "/api/coupons/bind":

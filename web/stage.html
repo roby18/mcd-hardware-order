@@ -360,6 +360,46 @@ body{
 .odload,.odempty{font-size:11px;color:var(--dim);line-height:1.7;padding:8px 2px}
 .odload{color:var(--gold)}
 
+/* ---------------- 下单类型弹窗(到店自取 / 外送) ---------------- */
+.otmask{position:fixed;inset:0;background:rgba(6,4,3,.62);backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;transition:opacity .25s;z-index:80}
+.otmask.on{opacity:1;pointer-events:auto}
+.otmodal{position:fixed;left:50%;top:50%;transform:translate(-50%,-46%) scale(.97);z-index:81;
+  width:min(432px,92vw);max-height:88vh;overflow:auto;padding:20px;
+  background:linear-gradient(180deg,#1C1512,#120D0A);border:1px solid var(--line);
+  border-radius:18px;box-shadow:0 24px 70px rgba(0,0,0,.66);
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}
+.otmodal.on{opacity:1;pointer-events:auto;transform:translate(-50%,-50%) scale(1)}
+.otmodal .oth{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.otmodal .oth h3{font-size:15px}
+.otmodal .oth .sp{flex:1}
+.otsec{display:flex;align-items:center;gap:8px;font-size:10.5px;color:var(--dim2);
+  font-weight:700;letter-spacing:.04em;margin:14px 0 8px}
+.otopt{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);
+  border-radius:12px;padding:11px 12px;background:rgba(255,255,255,.03);cursor:pointer;margin-bottom:8px}
+.otopt:hover{border-color:var(--gold);background:rgba(255,199,44,.06)}
+.otopt input{margin-top:2px;accent-color:var(--gold)}
+.otopt b{display:block;font-size:13px}
+.otopt i{display:block;font-size:10.5px;color:var(--dim2);font-style:normal;margin-top:2px;line-height:1.5}
+.otaddr{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);
+  border-radius:12px;padding:10px 12px;background:rgba(255,255,255,.03);cursor:pointer;margin-bottom:8px}
+.otaddr.on{border-color:var(--gold);background:rgba(255,199,44,.08)}
+.otaddr input{margin-top:2px;accent-color:var(--gold)}
+.otaddr b{display:block;font-size:12px}
+.otaddr i{display:block;font-size:10.5px;color:var(--dim2);font-style:normal;margin-top:2px;line-height:1.5}
+.otprice .row{display:flex;justify-content:space-between;font-size:12px;color:var(--dim);padding:5px 0}
+.otprice .row.ot{border-top:1px dashed var(--line);margin-top:6px;padding-top:9px;
+  font-size:14px;color:var(--ink);font-weight:800}
+.otprice .cp{color:var(--gold)}
+.otwarn{font-size:10.5px;color:#FFB4A2;background:rgba(255,120,90,.1);
+  border:1px solid rgba(255,120,90,.3);border-radius:9px;padding:8px 10px;margin-top:8px;line-height:1.6}
+.oterr{font-size:11px;color:#FFB4A2;line-height:1.6}
+.otacts{display:flex;gap:10px;margin-top:16px}
+.otacts button{flex:1;border:1px solid var(--line);background:rgba(255,255,255,.05);
+  color:var(--ink);border-radius:12px;padding:12px;font-size:13px;font-weight:700;cursor:pointer}
+.otacts button.gold{background:linear-gradient(180deg,var(--gold),var(--gold-d));color:#3A2600;border:none}
+.otacts button:disabled{opacity:.6;cursor:default}
+
 /* ---------------- 优惠券卡片 ---------------- */
 .cpc{display:flex;gap:12px;border:1px solid var(--line);border-radius:14px;
   background:var(--card);padding:12px;align-items:center;transition:.2s}
@@ -538,7 +578,7 @@ body{
     </div>
   </section>
 
-  <div class="ver">v1.10 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价 · 真实订单 + 卡包优惠券</div>
+  <div class="ver" id="verLabel">v1.10 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价 · 真实订单 + 卡包优惠券</div>
 </div>
 
 <!-- 语音浮层 -->
@@ -598,6 +638,10 @@ body{
     <div class="odempty" style="margin-top:4px">优惠券来自麦当劳官方 MCP 卡包，使用规则以麦当劳 APP 为准。</div>
   </div>
 </aside>
+
+<!-- 下单类型弹窗: 到店自取 / 外送(选地址) -->
+<div class="otmask" id="otMask"></div>
+<div class="otmodal" id="otModal"></div>
 
 <script>
 const $=id=>document.getElementById(id);
@@ -798,7 +842,7 @@ function renderTray(){
       `<div class="rsub">价格来自麦当劳 MCP 实时核价</div>`+
       `<button class="gold real-order-btn" id="realOrderBtn">确认并真实下单</button>`;
     const realBtn=$('realOrderBtn');
-    if(realBtn) realBtn.onclick=realOrder;
+    if(realBtn) realBtn.onclick=confirmOrder;
   }
 
   const n=cart.reduce((s,i)=>s+i.qty,0);
@@ -834,10 +878,15 @@ function renderAnalysis(cart){
 }
 
 /* ---------------- 轮询 ---------------- */
+function renderVersion(){
+  const el=$('verLabel'); if(!el) return;
+  const v=(STATE&&STATE.version)||'';
+  el.textContent=(v?('v'+v):'v—')+' · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价 · 真实订单 + 卡包优惠券';
+}
 async function poll(){
   try{
     const r=await fetch('/api/state'); STATE=await r.json();
-    renderCards(); renderTray();
+    renderCards(); renderTray(); renderVersion();
   }catch(e){}
 }
 
@@ -913,35 +962,122 @@ document.querySelectorAll('.chip').forEach(c=>c.onclick=()=>{
   $('ask').focus();
 });
 $('cartBtn').onclick=()=>{ window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); };
+/* ---------------- 下单类型弹窗(到店自取 / 外送) ---------------- */
+let OT={type:1,addresses:[],picked:'',pv:null,pvErr:'',pvBusy:false,addrErr:'',busy:false};
 function confirmOrder(){
   if(!(STATE.cart||[]).length){ say('餐盘为空'); return; }
-  const p=STATE.price||{};
-  const ok=window.confirm(`即将通过麦当劳官方 MCP 创建真实到店订单。\n\n门店：${STATE.store||'当前门店'}\n应付：¥${fmt(p.payable)}\n\n这不会自动支付，但可能生成待支付订单。确认继续？`);
-  if(ok) realOrder();
+  OT={type:1,addresses:[],picked:'',pv:null,pvErr:'',pvBusy:false,addrErr:'',busy:false};
+  $('otMask').classList.add('on');
+  $('otModal').classList.add('on');
+  renderOT();
 }
-async function realOrder(){
-  if(window.__realOrderBusy) return;
-  if(!(STATE.cart||[]).length){ say('餐盘为空'); return; }
-  const btn=$('realOrderBtn');
-  window.__realOrderBusy=true;
-  if(btn){ btn.disabled=true; btn.textContent='正在创建真实订单…'; }
-  $('msg').className='msg'; $('msg').textContent='正在通过麦当劳 MCP 创建真实订单…';
-  try{
-    const r=await post('/api/create-order',{confirmed:true,needTableware:false});
-    if(!r||r.error) throw new Error((r&&r.error)||'创建订单失败');
-    const o=r.order||{};
-    const id=o.orderId||o.orderNo||'已提交';
-    $('msg').className='msg ok';
-    $('msg').textContent=`真实订单已创建 · ${id}`+(o.payH5Url?' · 请打开支付链接完成支付':'');
-    if(o.payH5Url) window.open(o.payH5Url,'_blank','noopener');
-    ORDERS=null;
-  }catch(e){
-    $('msg').className='msg err'; $('msg').textContent='真实下单失败：'+e.message;
-  }finally{
-    window.__realOrderBusy=false;
-    if(btn){ btn.disabled=false; btn.textContent='确认并真实下单'; }
-    poll();
+function closeOrderType(){
+  $('otMask').classList.remove('on');
+  $('otModal').classList.remove('on');
+}
+$('otMask').onclick=closeOrderType;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeOrderType(); });
+function postOT(body){
+  return fetch('/api/order-preview',{method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify(body||{})}).then(r=>r.json()).catch(e=>({error:String(e)}));
+}
+async function loadOTAddresses(){
+  OT.pvBusy=true; renderOT();
+  const d=await postOT({orderType:2});          // 不带 addressId: 后端选默认/第一个并返回全部地址
+  if(d.error){ OT.addrErr=d.error; OT.pv=null; }
+  else{
+    OT.addrErr=''; OT.addresses=d.addresses||[];
+    OT.picked=(d.address||{}).addressId||(OT.addresses[0]||{}).addressId||'';
+    OT.pv=d; OT.pvErr='';
   }
+  OT.pvBusy=false; renderOT();
+}
+async function fetchOTPreview(){
+  if(OT.type!==2){ OT.pv=null; OT.pvErr=''; renderOT(); return; }
+  OT.pvBusy=true; renderOT();
+  const d=await postOT({orderType:2,addressId:OT.picked});
+  if(d.error){ OT.pvErr=d.error; OT.pv=null; } else { OT.pv=d; OT.pvErr=''; }
+  OT.pvBusy=false; renderOT();
+}
+function renderOT(){
+  const p=STATE.price||{};
+  let h='<div class="oth"><h3>确认订单</h3>'+
+    '<span class="tag">麦当劳官方 MCP · 不会自动支付</span><span class="sp"></span>'+
+    '<button class="odx" id="otClose" title="关闭">×</button></div>';
+  h+='<div class="otsec">取餐方式</div>';
+  h+='<label class="otopt"><input type="radio" name="ottype" value="1"'+(OT.type===1?' checked':'')+'>'+
+     '<span><b>到店自取</b><i>'+esc(STATE.store||'当前门店')+'</i></span></label>';
+  h+='<label class="otopt"><input type="radio" name="ottype" value="2"'+(OT.type===2?' checked':'')+'>'+
+     '<span><b>外送</b><i>送到收货地址 · 默认外送方式与地址已预选</i></span></label>';
+  if(OT.type===2){
+    h+='<div class="otsec">收货地址</div>';
+    if(OT.addrErr) h+='<div class="oterr">'+esc(OT.addrErr)+'</div>';
+    else if(!OT.addresses.length) h+='<div class="odload">正在获取收货地址…</div>';
+    else h+=OT.addresses.map(a=>
+      '<label class="otaddr'+(String(a.addressId)===String(OT.picked)?' on':'')+'">'+
+      '<input type="radio" name="otaddr" value="'+esc(a.addressId)+'"'+
+      (String(a.addressId)===String(OT.picked)?' checked':'')+'>'+
+      '<span><b>'+esc(a.contactName||'收货人')+' · '+esc(a.phone||'')+'</b>'+
+      '<i>'+esc(a.fullAddress||'')+(a.isDefault?' · 默认':'')+'</i></span></label>').join('');
+  }
+  h+='<div class="otsec">价格预览</div><div class="otprice" id="otprice">';
+  if(OT.pvBusy) h+='<div class="odload">正在向麦当劳 MCP 核价…</div>';
+  else if(OT.type===2&&OT.pvErr) h+='<div class="oterr">'+esc(OT.pvErr)+'</div>';
+  else if(OT.type===2&&OT.pv&&OT.pv.price){
+    const q=OT.pv.price;
+    h+='<div class="row"><span>商品原价</span><span>¥'+fmt(q.original||0)+'</span></div>';
+    if(q.discount>0) h+='<div class="row"><span>已优惠</span><span class="cp">-¥'+fmt(q.discount)+'</span></div>';
+    if(q.deliveryFee>0) h+='<div class="row"><span>配送费</span><span>¥'+fmt(q.deliveryFee)+'</span></div>';
+    h+='<div class="row"><span>外送门店</span><span>'+esc((OT.pv.store||{}).storeName||'')+'</span></div>';
+    h+='<div class="row ot"><span>应付</span><span>¥'+fmt(q.payable||0)+'</span></div>';
+    if((OT.pv.missing||[]).length) h+='<div class="otwarn">外送门店暂不可售：'+
+      esc(OT.pv.missing.join('、'))+'（已自动剔除，可回菜单换等价餐品）</div>';
+  }else{
+    h+='<div class="row"><span>商品原价</span><span>¥'+fmt(p.original||0)+'</span></div>';
+    if(p.discount>0) h+='<div class="row"><span>已优惠</span><span class="cp">-¥'+fmt(p.discount)+'</span></div>';
+    h+='<div class="row"><span>门店</span><span>'+esc(STATE.store||'当前门店')+'</span></div>';
+    h+='<div class="row ot"><span>应付</span><span>¥'+fmt(p.payable||0)+'</span></div>';
+  }
+  h+='</div>';
+  h+='<div class="otacts">'+
+    '<button class="gold" id="otGo"'+(OT.busy?' disabled':'')+'>'+(OT.busy?'正在创建订单…':'确认并真实下单')+'</button>'+
+    '<button id="otCancel">取消</button></div>';
+  $('otModal').innerHTML=h;
+  $('otClose').onclick=closeOrderType;
+  $('otCancel').onclick=closeOrderType;
+  $('otGo').onclick=submitOT;
+  $('otModal').querySelectorAll('input[name=ottype]').forEach(r=>r.onchange=()=>{
+    OT.type=parseInt(r.value,10);
+    if(OT.type===2&&!OT.addresses.length&&!OT.addrErr) loadOTAddresses();
+    else fetchOTPreview();
+  });
+  $('otModal').querySelectorAll('input[name=otaddr]').forEach(r=>r.onchange=()=>{
+    OT.picked=r.value; fetchOTPreview();
+  });
+}
+async function submitOT(){
+  if(OT.busy) return;
+  OT.busy=true; renderOT();
+  const body={confirmed:true,needTableware:false,orderType:OT.type};
+  if(OT.type===2) body.addressId=OT.picked;
+  const r=await post('/api/create-order',body);
+  if(!r||r.error){
+    OT.busy=false; renderOT();
+    $('msg').className='msg err';
+    $('msg').textContent='真实下单失败：'+((r&&r.error)||'创建订单失败');
+    return;
+  }
+  const o=r.order||{};
+  const id=o.orderId||o.orderNo||'已提交';
+  closeOrderType();
+  $('msg').className='msg ok';
+  $('msg').textContent=(OT.type===2?'外送':'到店自取')+'真实订单已创建 · '+id+
+    (o.payH5Url?' · 请打开支付链接完成支付':'');
+  if(o.payH5Url) window.open(o.payH5Url,'_blank','noopener');
+  ORDERS=null;
+  OT.busy=false;
+  poll();
 }
 $('btnConfirm').onclick=openOrders;
 $('btnClear').onclick=()=>{
