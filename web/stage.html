@@ -385,6 +385,13 @@ body{
 .cpclaim button{flex:none;border:0;border-radius:999px;padding:7px 12px;cursor:pointer;
   background:var(--gold);color:#3A2600;font:800 10.5px inherit}
 .cpclaim button:disabled{opacity:.5;cursor:not-allowed}
+.settings-mask{position:fixed;inset:0;background:rgba(6,4,3,.64);backdrop-filter:blur(6px);opacity:0;pointer-events:none;transition:opacity .25s;z-index:70}
+.settings-mask.on{opacity:1;pointer-events:auto}
+.settings-drawer{position:fixed;top:0;left:0;height:100%;width:min(430px,94vw);z-index:71;transform:translateX(-103%);transition:transform .34s var(--jelly);background:linear-gradient(180deg,#1C1512,#120D0A);border-right:1px solid var(--line);box-shadow:30px 0 70px rgba(0,0,0,.6);display:flex;flex-direction:column}
+.settings-drawer.on{transform:translateX(0)}
+.set-head{display:flex;align-items:center;gap:10px;padding:16px;border-bottom:1px solid var(--line)}
+.set-head h3{font-size:15px}.set-head .sp{flex:1}.set-body{overflow:auto;padding:15px;display:flex;flex-direction:column;gap:18px}.set-sec{border:1px solid var(--line);border-radius:14px;padding:13px;background:rgba(255,255,255,.025)}
+.set-sec h4{font-size:12px;color:var(--gold);margin-bottom:10px}.set-sec h4 small{color:var(--dim2);font-weight:500;margin-left:5px}.set-field{margin-top:9px}.set-field label{display:block;font-size:10px;color:var(--dim);margin-bottom:5px}.set-field input{width:100%;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.05);color:var(--ink);padding:9px 10px;font:12px inherit;outline:none}.set-field input:focus{border-color:var(--gold)}.set-actions{display:flex;gap:8px;margin-top:11px}.set-actions button{flex:1;border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.06);color:var(--ink);padding:9px;cursor:pointer;font:11px inherit}.set-actions button.gold{background:var(--gold);color:#3A2600;border:0;font-weight:800}.set-msg{font-size:10.5px;color:var(--gold);margin-top:8px;line-height:1.5}.set-msg.err{color:#FF867A}.keymap-list{display:grid;grid-template-columns:1fr 1fr;gap:6px}.keymap-row{display:flex;align-items:center;gap:6px;padding:7px 8px;border-radius:8px;background:rgba(255,255,255,.04);font-size:10px}.keymap-row b{color:var(--gold);width:16px}.keymap-row select{margin-left:auto;max-width:125px;background:#241A15;color:var(--ink);border:1px solid var(--line);border-radius:5px;padding:3px;font:10px inherit}
 </style>
 </head>
 <body>
@@ -410,6 +417,9 @@ body{
       <span class="badge" id="cartBadge">0</span>
     </button>
     <button class="orderbtn" id="btnConfirm">我的订单</button>
+    <button class="icobtn" id="gearBtn" title="设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.1h-4v-.1a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1-2.8-2.8.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.6-1H2.9v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9l-.1-.1L7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3 1.7 1.7 0 0 0 1-1.6v-.1h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1 2.8 2.8-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.1v4h-.1a1.7 1.7 0 0 0-1.6 1z"/></svg>
+    </button>
     <button class="couponbtn" id="btnCoupon" title="卡包优惠券">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M3 8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v1a2 2 0 0 0 0 6v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1a2 2 0 0 0 0-6z"/>
@@ -446,7 +456,7 @@ body{
     <div class="cards" id="cards"></div>
     <button class="arrow r" id="arrowR" title="下一款">›</button>
 
-    <div class="hint"><kbd>1</kbd>-<kbd>6</kbd> 切分类 · <kbd>7</kbd> 换一组 · <kbd>8</kbd> 确认订单 · <kbd>←</kbd> <kbd>→</kbd> 换套餐 · <kbd>Enter</kbd> 加入 · <b>点图直接加购</b></div>
+    <div class="hint"><kbd>1</kbd>-<kbd>6</kbd> 切分类 · <kbd>7</kbd> 删除最近添加 · <kbd>8</kbd> 我的订单 · <kbd>←</kbd> <kbd>→</kbd> 换套餐 · <kbd>Enter</kbd> 加入 · <b>点图直接加购</b></div>
   </section>
 
   <section class="bottom">
@@ -559,6 +569,23 @@ body{
       <button class="rf" id="odRefresh">重新拉取</button>
     </div>
     <div id="odList"></div>
+  </div>
+</aside>
+
+<!-- 设置抽屉: 大模型配置 + 8键键位配置 -->
+<div class="settings-mask" id="setMask"></div>
+<aside class="settings-drawer" id="setDrawer">
+  <div class="set-head"><h3>设置</h3><span style="font-size:9px;color:var(--dim2);letter-spacing:.1em">SETTINGS</span><span class="sp"></span><button class="odx" id="setClose">×</button></div>
+  <div class="set-body">
+    <div class="set-sec"><h4>配单引擎 <small id="setEngineNow"></small></h4>
+      <div class="set-actions"><button id="setLocal">本地算法</button><button id="setLlm" class="gold">大模型</button></div>
+      <div class="set-field"><label>Base URL（OpenAI 兼容）</label><input id="setBase" placeholder="https://api.deepseek.com"></div>
+      <div class="set-field"><label>API Key</label><input id="setKey" type="password" placeholder="sk-..."></div>
+      <div class="set-field"><label>模型名</label><input id="setModel" placeholder="deepseek-v4.1-flash"></div>
+      <div class="set-actions"><button id="setTest">测试连接</button><button id="setSave" class="gold">保存并启用</button></div>
+      <div class="set-msg" id="setMsg"></div>
+    </div>
+    <div class="set-sec"><h4>实体按键 <small>8 键可改绑</small></h4><div class="keymap-list" id="setKeymap"></div></div>
   </div>
 </aside>
 
@@ -739,6 +766,12 @@ function addItem(item){
   post('/api/add',{code:item.code}).then(()=>{ poll(); say('已加入 '+item.name); });
 }
 function removeItem(code){ post('/api/remove',{code,qty:1}).then(poll); }
+function removeLatest(){
+  const cart=STATE.cart||[];
+  if(!cart.length){ say('餐盘已经是空的'); return; }
+  const latest=cart[cart.length-1];
+  post('/api/remove',{code:latest.code,qty:1}).then(()=>{ poll(); say('已删除最近添加：'+latest.name); });
+}
 
 /* ---------------- 托盘 / 小票 ---------------- */
 function renderTray(){
@@ -828,12 +861,12 @@ function rotate(d){
 /* ---------------- 键盘 ---------------- */
 document.addEventListener('keydown',e=>{
   if(['INPUT','TEXTAREA'].includes(e.target.tagName)) return;
-  if(/^[1-8]$/.test(e.key)){          // 1-6 切分类 / 7 换一组 / 8 确认订单
+  if(/^[1-8]$/.test(e.key)){          // 1-6 切分类 / 7 删除最近添加 / 8 确认订单
     const n=parseInt(e.key,10);
     if(n===8){ e.preventDefault(); confirmOrder(); return; }
-    const {slice,hasMore}=pageTabs();
+    if(n===7){ e.preventDefault(); removeLatest(); return; }
+    const {slice}=pageTabs();
     if(n<=slice.length){ e.preventDefault(); setCat(slice[n-1][0]); }
-    else if(n===7&&CATS.length>PER){ e.preventDefault(); nextPage(); }  // 末页按 7 回到第一页
     return;
   }
   if(e.key==='ArrowLeft'){ e.preventDefault(); rotate(-1); }
@@ -1123,27 +1156,65 @@ function bindClaimButton(){
   };
 }
 
+/* ---------------- 设置抽屉 ---------------- */
+let SETCFG={};
+function openSettings(){ $('setMask').classList.add('on'); $('setDrawer').classList.add('on'); loadSettings(); }
+function closeSettings(){ $('setMask').classList.remove('on'); $('setDrawer').classList.remove('on'); }
+$('gearBtn').onclick=openSettings; $('setClose').onclick=closeSettings; $('setMask').onclick=closeSettings;
+async function loadSettings(){
+  const d=await (await fetch('/api/config')).json(); SETCFG=d||{};
+  const l=d.llm||{}; $('setBase').value=l.base||''; $('setKey').value=l.key||''; $('setModel').value=l.model||'';
+  $('setEngineNow').textContent=d.engine==='llm'?'当前：大模型':'当前：本地算法';
+  renderSetKeymap(d.keymap||{});
+}
+function renderSetKeymap(km){
+  const actions={confirm:'确认订单',clear:'清空餐盘',voice:'语音',up:'上一款',down:'下一款'};
+  $('setKeymap').innerHTML=Array.from({length:8},(_,i)=>{
+    const n=i+1, x=km[String(n)]||{};
+    const name=x.type==='item'?(CATALOG.find(c=>c.code===x.code)||{}).name||'餐品':(actions[x.action]|| (n===8?'确认订单':'默认餐品'));
+    return '<div class="keymap-row"><b>'+n+'</b><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(name)+'</span></div>';
+  }).join('');
+}
+function setMsg(t,err){$('setMsg').textContent=t;$('setMsg').classList.toggle('err',!!err)}
+$('setLocal').onclick=()=>{ post('/api/llm-config',{enabled:false}).then(()=>{setMsg('已切换本地算法');loadSettings()}) };
+$('setTest').onclick=async()=>{ setMsg('测试中…'); await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); const r=await post('/api/llm-config',{test:true}); setMsg(r.ok?'连接成功：'+(r.msg||''):'失败：'+(r.msg||''),!r.ok); };
+$('setSave').onclick=async()=>{ const r=await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); setMsg(r.ok?'已保存并启用':'保存失败',!r.ok); if(r.ok)loadSettings(); };
+
 /* ---------------- 语音 PTT ---------------- */
-let voiceBusy=false;
+let voiceBusy=false, speech=null, speechText='', speechSupported=false;
+const SpeechAPI=window.SpeechRecognition||window.webkitSpeechRecognition;
+if(SpeechAPI){
+  speechSupported=true; speech=new SpeechAPI(); speech.lang='zh-CN'; speech.interimResults=true; speech.continuous=false;
+  speech.onresult=e=>{
+    speechText=Array.from(e.results).map(r=>r[0].transcript).join('');
+    $('vsub').textContent='识别到：'+speechText;
+  };
+  speech.onerror=e=>{ $('vsub').textContent=e.error==='not-allowed'?'麦克风权限被拒绝':'语音识别失败：'+e.error; };
+}
 function voiceDown(){
-  if(voiceBusy) return; voiceBusy=true;
-  $('vlayer').classList.add('on');
-  $('micBtn').classList.add('rec');
+  if(voiceBusy) return; voiceBusy=true; speechText='';
+  $('vlayer').classList.add('on'); $('micBtn').classList.add('rec');
   $('vtitle').textContent='我在听…';
-  $('vsub').textContent='说完松手即发送';
+  $('vsub').textContent=speechSupported?'请直接说出你的点餐需求':'当前浏览器不支持语音识别，请使用 Chrome 或 Edge';
   post('/api/voice',{state:'down'});
+  if(speechSupported){ try{ speech.start(); }catch(e){} }
 }
 function voiceUp(){
   if(!voiceBusy) return; voiceBusy=false;
-  $('vlayer').classList.remove('on');
-  $('micBtn').classList.remove('rec');
+  if(speechSupported){ try{ speech.stop(); }catch(e){} }
+  $('vlayer').classList.remove('on'); $('micBtn').classList.remove('rec');
   post('/api/voice',{state:'up'});
+  if(speechText.trim()){
+    $('ask').value=speechText.trim();
+    setTimeout(()=>ask(),120);
+  }else if(!speechSupported){ say('语音识别不可用：请用 Chrome/Edge，并允许麦克风权限'); }
 }
 (function bindMic(){
   const m=$('micBtn');
   m.addEventListener('pointerdown',e=>{ e.preventDefault(); voiceDown(); });
   m.addEventListener('pointerup',()=>voiceUp());
-  m.addEventListener('pointerleave',()=>voiceUp());
+  m.addEventListener('pointercancel',()=>voiceUp());
+  m.addEventListener('pointerleave',()=>{ if(voiceBusy) voiceUp(); });
   m.addEventListener('click',e=>e.preventDefault());
 })();
 
