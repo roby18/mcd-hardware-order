@@ -187,6 +187,9 @@ body{
 .receipt .real-order-btn{display:block;width:100%;margin-top:12px;padding:10px 12px;border:0;border-radius:8px;font-size:14px;font-weight:900;cursor:pointer}
 .receipt .real-order-btn:disabled{opacity:.55;cursor:not-allowed}
 .receipt .rvoid{text-align:center;font-size:11.5px;color:#9A8A7A;padding:10px 0}
+.receipt .rerr{font-size:11.5px;color:#B23A1E;background:rgba(255,120,90,.12);
+  border:1px solid rgba(255,120,90,.35);border-radius:9px;padding:9px 11px;
+  margin-top:9px;line-height:1.65}
 
 /* ---------------- AI 助手 ---------------- */
 .ai{background:linear-gradient(170deg,rgba(255,199,44,.075),rgba(255,255,255,.025));
@@ -615,6 +618,11 @@ body{
       <div class="set-actions"><button id="setTest">测试连接</button><button id="setSave" class="gold">保存并启用</button></div>
       <div class="set-msg" id="setMsg"></div>
     </div>
+    <div class="set-sec"><h4>门店菜单 <small id="menuCount"></small></h4>
+      <div class="set-actions"><button id="menuRefresh">刷新菜单</button></div>
+      <div class="set-msg" id="menuMsg"></div>
+      <div style="font-size:9.5px;color:var(--dim2);line-height:1.6">麦当劳菜单随早/正餐时段切换（约 10:30 早餐下市）。合计为 0 或提示不可售时点此刷新；系统每 10 分钟也会自动刷新。</div>
+    </div>
     <div class="set-sec"><h4>实体按键 <small>8 键可改绑</small></h4><div class="keymap-list" id="setKeymap"></div></div>
   </div>
 </aside>
@@ -832,6 +840,15 @@ function renderTray(){
   const p=STATE.price||{};
   if(!cart.length){
     rc.innerHTML='<h4>订 单 明 细</h4><div class="rvoid">还没有选餐</div>';
+  }else if(p.error){
+    // 算价失败(典型: 早餐品过了供应时段, MCP 报「商品已售罄或不可售」):
+    // 明确提示原因, 不显示 ¥0.00 误导, 并禁用下单按钮。
+    rc.innerHTML='<h4>订 单 明 细</h4>'+
+      cart.map(i=>`<div class="rl"><span class="n">${esc(i.name)}</span>`+
+        `<span class="q">×${i.qty}</span>`+
+        `<span class="v">¥${fmt(i.subtotal)}</span></div>`).join('')+
+      `<div class="rerr">当前不可售：${esc(p.error)}<br>早餐品已过供应时段或商品售罄 —— 可清空餐盘换正餐，或到设置里点「刷新菜单」</div>`+
+      `<button class="gold real-order-btn" id="realOrderBtn" disabled>确认并真实下单</button>`;
   }else{
     rc.innerHTML='<h4>订 单 明 细</h4>'+
       cart.map(i=>`<div class="rl"><span class="n">${esc(i.name)}</span>`+
@@ -1033,6 +1050,8 @@ function renderOT(){
     h+='<div class="row ot"><span>应付</span><span>¥'+fmt(q.payable||0)+'</span></div>';
     if((OT.pv.missing||[]).length) h+='<div class="otwarn">外送门店暂不可售：'+
       esc(OT.pv.missing.join('、'))+'（已自动剔除，可回菜单换等价餐品）</div>';
+  }else if(p.error){
+    h+='<div class="oterr">当前不可售：'+esc(p.error)+'<br>早餐品已过供应时段或商品售罄 —— 可取消后清空餐盘换正餐，或到设置里点「刷新菜单」</div>';
   }else{
     h+='<div class="row"><span>商品原价</span><span>¥'+fmt(p.original||0)+'</span></div>';
     if(p.discount>0) h+='<div class="row"><span>已优惠</span><span class="cp">-¥'+fmt(p.discount)+'</span></div>';
@@ -1041,7 +1060,7 @@ function renderOT(){
   }
   h+='</div>';
   h+='<div class="otacts">'+
-    '<button class="gold" id="otGo"'+(OT.busy?' disabled':'')+'>'+(OT.busy?'正在创建订单…':'确认并真实下单')+'</button>'+
+    '<button class="gold" id="otGo"'+((OT.busy||(OT.type===1&&p.error))?' disabled':'')+'>'+(OT.busy?'正在创建订单…':'确认并真实下单')+'</button>'+
     '<button id="otCancel">取消</button></div>';
   $('otModal').innerHTML=h;
   $('otClose').onclick=closeOrderType;
@@ -1325,6 +1344,7 @@ async function loadSettings(){
   $('setLocal').classList.toggle('gold',!isLlm);
   $('setLlm').classList.toggle('gold',isLlm);
   renderSetKeymap(d.keymap||{});
+  $('menuCount').textContent=(STATE.catalogSize||0)+' 款';
 }
 function renderSetKeymap(km){
   const actions={confirm:'确认订单',clear:'清空餐盘',voice:'语音',up:'上一款',down:'下一款'};
@@ -1339,6 +1359,17 @@ $('setLocal').onclick=()=>{ post('/api/llm-config',{enabled:false}).then(()=>{EN
 $('setLlm').onclick=()=>{ post('/api/llm-config',{enabled:true,base:$('setBase').value,key:$('setKey').value,model:$('setModel').value}).then(()=>{ENGINE='llm';setMsg('已启用大模型');loadSettings()}) };
 $('setTest').onclick=async()=>{ setMsg('测试中…'); await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); const r=await post('/api/llm-config',{test:true}); setMsg(r.ok?'连接成功：'+(r.msg||''):'失败：'+(r.msg||''),!r.ok); loadSettings(); };
 $('setSave').onclick=async()=>{ const r=await post('/api/llm-config',{base:$('setBase').value,key:$('setKey').value,model:$('setModel').value,enabled:true}); setMsg(r.ok?'已保存并启用':'保存失败',!r.ok); if(r.ok)loadSettings(); };
+$('menuRefresh').onclick=async()=>{
+  const b=$('menuRefresh'); b.disabled=true; b.textContent='刷新中…';
+  const r=await post('/api/reload',{});
+  b.disabled=false; b.textContent='刷新菜单';
+  const m=$('menuMsg');
+  if(r.error){ m.textContent='刷新失败：'+r.error; m.classList.add('err'); return; }
+  let t='已刷新：'+(r.count||0)+' 款';
+  if((r.dropped||[]).length) t+='，移除已下架：'+r.dropped.join('、');
+  m.textContent=t; m.classList.remove('err');
+  say(t); poll();
+};
 
 /* ---------------- 小智语音 ----------------
  * 语音由硬件麦克风 -> 小智云端 ASR/LLM -> MCP 接入点处理。

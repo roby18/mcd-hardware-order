@@ -193,6 +193,8 @@ class Bridge:
         }
         self.keymap = {}            # {"1": {"type":"item","code":"5022"}, "8": {"type":"action","action":"confirm"}}
         self._load_config()
+        # 菜单时段自愈: 每 10 分钟重拉菜单(早/正餐切换后换新 catalog 并清理下架商品)
+        threading.Thread(target=self._menu_refresh_loop, daemon=True).start()
 
     # ------------------------------------------------ 配置持久化
     def _load_config(self):
@@ -435,6 +437,7 @@ class Bridge:
                     "balance": pr.get("balance", 0.0),
                     "next": pr.get("next_discount"),
                     "takeWayCode": pr.get("takeWayCode", ""),
+                    "error": pr.get("error", ""),
                 },
                 "log": self.log[-12:],
                 "voice": self.voice_active,
@@ -636,6 +639,61 @@ class Bridge:
         threading.Thread(target=self.prefetch_images, daemon=True).start()
         return True
 
+    def refresh_menu(self):
+        """按当前门店重拉菜单并清理餐盘里已下架的商品。返回 (款数, 下架品名列表)。
+
+        麦当劳菜单随早/正餐时段切换(如 10:30 早餐下市): bridge 启动时拉的
+        catalog 之后会含已下架商品, 加购后 MCP 算价报「商品已售罄或不可售」。
+        这里重拉换新 catalog, 并把餐盘中不在新菜单里的商品清掉(留着也算不了价)。
+        """
+        if mcd is None:
+            return 0, []
+        try:
+            cats, meals = mcd.fetch_menu(self.store_code)
+            new_catalog = mcd.build_catalog(cats, meals, self.avoid)
+            for it in new_catalog:
+                url = it.get("image") or ""
+                ext = os.path.splitext(url)[1].lower() or ".png"
+                if ext not in (".png", ".jpg", ".jpeg", ".webp"):
+                    ext = ".png"
+                it["localImg"] = "/img/" + it["code"] + ext
+        except Exception as e:
+            self.push_log(f"菜单刷新失败: {e}")
+            return 0, []
+        if not new_catalog:
+            self.push_log("菜单刷新: 接口返回空, 保留原菜单")
+            return 0, []
+        dropped = []
+        with self.lock:
+            self.catalog = new_catalog
+            self.menu_loaded = True
+            self.menu_cached = False
+            codes = {c["code"] for c in new_catalog}
+            for code in list(self.cart.keys()):
+                if code not in codes:
+                    dropped.append(self.cart.pop(code)["item"]["name"])
+            if self.selection >= len(self.catalog):
+                self.selection = 0
+        self._save_menu_cache()
+        if dropped:
+            self.push_log(f"菜单已刷新({len(new_catalog)} 款), "
+                          f"已下架移除: {'、'.join(dropped[:5])}")
+        else:
+            self.push_log(f"菜单已刷新({len(new_catalog)} 款)")
+        if self.cart:
+            self.recalc()
+        self.broadcast()
+        return len(new_catalog), dropped
+
+    def _menu_refresh_loop(self):
+        """每 10 分钟重拉一次菜单, 时段切换后自动换新并清理下架商品。"""
+        while True:
+            time.sleep(600)
+            try:
+                self.refresh_menu()
+            except Exception as e:
+                self.push_log(f"菜单定时刷新失败: {e}")
+
     def prefetch_images(self):
         """把菜单图片下载到 web/img/ 本地缓存: 现场断网/网络差也能演示。
         已有缓存跳过; 单张失败不影响整体。路径字段已在 load_menu 写好。"""
@@ -695,6 +753,10 @@ class Bridge:
             }
         except Exception as e:
             self.push_log(f"算价失败: {e}")
+            # 算价失败时把原因写进 price_result: 前端小票提示「当前不可售」,
+            # 而不是合计显示 ¥0.00 让人误以为系统坏了。
+            # 典型场景: 早餐品(麦满分等)过了供应时段, MCP 报「商品已售罄或不可售」。
+            self.price_result = {"error": _short_err(e)}
 
     def create_real_order(self, need_tableware=False, order_type=1, address_id=""):
         """通过麦当劳 MCP 创建真实订单（不会自动支付）。
@@ -1688,10 +1750,9 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/reload":
-            ok = BRIDGE.load_menu(b.get("city", DEFAULT_CITY),
-                                  b.get("keyword", DEFAULT_KEYWORD))
-            BRIDGE.broadcast()
-            self._json({"ok": ok})
+            # 重拉当前门店菜单(时段切换后换新), 并清理餐盘里已下架的商品
+            n, dropped = BRIDGE.refresh_menu()
+            self._json({"ok": n > 0, "count": n, "dropped": dropped})
             return
 
         if path == "/api/yb":
