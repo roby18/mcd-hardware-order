@@ -834,24 +834,23 @@ class Bridge:
                 "subs": [{"name": s.get("itemName", ""), "qty": int(s.get("itemQuantity") or 1)}
                          for s in (p.get("comboItemList") or [])],
             })
-        # 外送订单的收货地址字段在不同接口版本中名称略有差异，统一归一化给前端。
-        delivery = (d.get("deliveryAddress") or d.get("receiveAddress") or
-                    d.get("addressInfo") or d.get("userAddress") or {})
-        if isinstance(delivery, dict):
-            delivery_address = (delivery.get("fullAddress") or delivery.get("address") or
-                                delivery.get("detail") or delivery.get("addressDetail") or "")
-            delivery_name = delivery.get("name") or delivery.get("receiverName") or ""
-            delivery_phone = delivery.get("phone") or delivery.get("receiverPhone") or ""
-        else:
-            delivery_address = str(delivery or "")
-            delivery_name = delivery_phone = ""
-        if not delivery_address:
-            delivery_address = (d.get("deliveryAddressText") or d.get("address") or "")
+        # 外送订单的收货地址: 实测结构是顶层 deliveryInfo.deliveryAddress / addressDetail /
+        # customerNickname / mobilePhone (deliveryInfo.deliveryType=立即送出)。
+        # 不同账号/接口版本字段名可能有出入, 所以这里对 deliveryInfo 内做多字段兜底。
+        info = d.get("deliveryInfo") if isinstance(d.get("deliveryInfo"), dict) else {}
+        delivery_address = (info.get("deliveryAddress") or info.get("fullAddress") or
+                            info.get("address") or info.get("addressDetail") or "")
+        detail = info.get("addressDetail") or ""
+        if detail and detail not in delivery_address:
+            delivery_address = (delivery_address + " " + detail).strip()
+        delivery_name = info.get("customerNickname") or info.get("name") or ""
+        delivery_phone = info.get("mobilePhone") or info.get("phone") or ""
         return {
             "orderId": d.get("orderId", order_id),
             "status": d.get("orderStatus", ""),
             "store": d.get("storeName", ""),
             "address": d.get("storeAddress", ""),
+            "deliveryType": info.get("deliveryType", ""),
             "deliveryAddress": delivery_address,
             "deliveryName": delivery_name,
             "deliveryPhone": delivery_phone,

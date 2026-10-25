@@ -118,8 +118,25 @@ set MCP_ENDPOINT=wss://api.xiaozhi.me/mcp/?token=...   # 可选, 语音链路才
 
 ### 3. 启动
 
-```bash
-start.bat                      # Windows 一键启动（含桥接器）
+**推荐：最外层总脚本**（一个脚本拉起全部服务，不用到处找）
+
+```bat
+D:\AI\Workbuddy\xiaozhiAI\start-all.bat    # 点餐台 bridge + 小智 MCP 链路(hub 监督器) + 打开页面
+D:\AI\Workbuddy\xiaozhiAI\stop-all.bat     # 一键停止全部服务
+```
+
+总脚本会自动：
+
+1. 从 `.workbuddy/credentials-*.env` 读取 `MCD_MCP_TOKEN` / `MCP_ENDPOINT` / `YUANBAO_API_KEY`（不回显值）
+2. 启动 `bridge_server.py`（端口 8787，已占用则复用）
+3. 用 `xiaozhi-mcp-hub\.venv\Scripts\python.exe` 启动 `supervise.py`，看护 mcp_pipe（小智接入点）与 hub（麦当劳 MCP），崩溃自动重启
+4. 打开点餐台 `/` 与侦探页 `/detective`
+
+**仓库内脚本**（功能相同，适合只拷了本目录的情况）：
+
+```bat
+start.bat                      # 一键启动：网页点餐台 + 小智 MCP 链路(自动找 hub 虚拟环境)
+start_voice.bat                # 只起语音桥：点餐台已在运行时，单独起/重启小智语音链路
 ```
 
 或手动三步：
@@ -129,6 +146,8 @@ python bridge_server.py --port 8787      # 桥接服务 + 网页
 python mcp_pipe.py --endpoint wss://...  # 语音链路（可选）
 ```
 
+> 注意：小智 hub 必须用 `xiaozhi-mcp-hub\.venv` 里的 Python 跑，系统 Python 缺 `mcp/websockets/httpx` 会直接起不来。
+
 ## 目录结构
 
 ```
@@ -136,7 +155,8 @@ hardware-order/
 ├── bridge_server.py    餐盘状态 + HTTP API + SSE 推送 + 麦当劳调用 + 图片预下载
 ├── mcp_server.py       stdio MCP 服务（7 个工具）
 ├── mcp_pipe.py         接小智 MCP 接入点的 WebSocket 桥接器
-├── start.bat           一键启动
+├── start.bat           一键启动（bridge + 小智 MCP 链路）
+├── start_voice.bat     单独起/重启小智语音链路
 ├── web/index.html      点餐台网页（单文件，无构建：唱机旋钮 + 照片窗 + 邻近条 + 硬件镜像折叠钮 + 可改按键帽 + 设置抽屉 + 菜单 + 餐盘）
 ├── web/detective.html  侦探赛道作品页（三轮递进搜索 + 证据链）
 ├── web/img/            菜品照片本地缓存（启动时自动下载，89 张）

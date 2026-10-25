@@ -538,7 +538,7 @@ body{
     </div>
   </section>
 
-  <div class="ver">v1.5 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价 · 真实历史订单 + 卡包优惠券</div>
+  <div class="ver">v1.10 · 麦门点餐台 · ESP32 硬件联动 + 麦当劳 MCP 实时核价 · 真实订单 + 卡包优惠券</div>
 </div>
 
 <!-- 语音浮层 -->
@@ -1081,6 +1081,7 @@ async function toggleDetail(i,o){
     d.coupons.map(c=>esc(c.name)+(c.amount>0?`（省 ¥${fmt(c.amount)}）`:'')).join('、')+'</div>';
   if(d.pickupCode) h+='<div>取餐码：<span class="cp">'+esc(d.pickupCode)+'</span></div>';
   if(d.deliveryAddress){
+    h+='<div class="row"><span>'+(esc(d.deliveryType)||'外送')+'</span><span></span></div>';
     h+='<div>配送地址：'+esc(d.deliveryAddress)+'</div>';
     if(d.deliveryName||d.deliveryPhone) h+='<div>收货人：'+esc(d.deliveryName||'')+
       (d.deliveryPhone?' · '+esc(d.deliveryPhone):'')+'</div>';
